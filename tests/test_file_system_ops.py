@@ -121,7 +121,7 @@ def test_perform_file_actions_live_move_create_dir(tmp_path, mock_cfg_helper, mo
     # Arrange: Let file operations run
     mock_cfg_helper.args.dry_run = False; mock_cfg_helper.args.backup_dir = None; mock_cfg_helper.args.stage_dir = None; mock_cfg_helper.args.use_trash = False
     mock_cfg_helper.manager._mock_values = {'create_folders': True, 'on_conflict': 'skip', 'enable_undo': True}
-    plan``` = create_test_plan(tmp_path, actions=[("old/vid.mkv", "New Name.mkv", 'file', 'move')], created_dir="New Dir")
+    plan = create_test_plan(tmp_path, actions=[("old/vid.mkv", "New Name.mkv", 'file', 'move')], created_dir="New Dir")
     orig_path = plan.actions[0].original_path; final_path = plan.actions[0].new_path; created_dir_path = plan.created_dir_path
     # Create source file using write_text (handles parent creation)
     orig_path.write_text("content")
