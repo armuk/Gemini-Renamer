@@ -1,0 +1,35 @@
+[default]
+# General settings applied unless overridden by a profile or command line
+log_file = "renamer.log"
+enable_undo = true
+use_metadata = true
+recursive = false
+processing_mode = "auto"
+on_conflict = "skip" # skip, overwrite, suffix, fail
+api_rate_limit_delay = 0.5 # seconds between API calls
+# --- Formats ---
+series_format = "{show_title} - S{season:0>2}E{episode:0>2} - {episode_title}{ext}"
+movie_format = "{movie_title} ({movie_year}){ext}"
+subtitle_format = "{stem}.{lang_code}{flags_dot}{ext}" # Placeholders: stem, lang_code, flags_dot (like .forced), ext
+# --- Folder Structure (Optional) ---
+create_folders = false
+folder_format_series = "{show_title} ({show_year})/Season {season:0>2}"
+folder_format_movie = "{movie_title} ({movie_year})"
+# --- Extensions ---
+video_extensions = [".mkv", ".mp4", ".avi", ".mov", ".wmv"]
+associated_extensions = [".srt", ".sub", ".ssa", ".ass", ".vtt", ".nfo", ".jpg", ".png"]
+
+[profile.plex_optimized]
+# Example profile overriding some defaults
+series_format = "{show_title} - S{season:0>2}E{episode:0>2} - {episode_title} [{quality} {audio_codec}]{ext}" # Assuming guessit provides these
+movie_format = "{movie_title} ({movie_year}) [{quality}]{ext}"
+create_folders = true
+on_conflict = "suffix"
+
+[profile.simple_tv]
+processing_mode = "series"
+series_format = "S{season:0>2}E{episode:0>2}{ext}"
+use_metadata = false
+create_folders = false
+
+# Add more profiles as needed
