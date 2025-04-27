@@ -1,169 +1,21 @@
 ============================= test session starts ==============================
 platform darwin -- Python 3.13.3, pytest-8.3.5, pluggy-1.5.0 -- /Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13
 cachedir: .pytest_cache
-rootdir: /Users/alexmunroe/Development/Gemini_Renamer
+rootdir: /Users/alexmunroe/Development/Gemini-Renamer
 plugins: mock-3.14.0
-collecting ... collected 59 items
+collecting ... collected 48 items / 1 error
 
-tests/test_file_system_ops.py::test_perform_file_actions_dry_run_rename FAILED [  1%]
-tests/test_file_system_ops.py::test_perform_file_actions_dry_run_move_create_dir FAILED [  3%]
-tests/test_file_system_ops.py::test_perform_file_actions_live_rename PASSED [  5%]
-tests/test_file_system_ops.py::test_perform_file_actions_live_move_create_dir FAILED [  6%]
-tests/test_file_system_ops.py::test_perform_file_actions_live_trash PASSED [  8%]
-tests/test_file_system_ops.py::test_perform_file_actions_live_backup PASSED [ 10%]
-tests/test_file_system_ops.py::test_perform_file_actions_live_stage PASSED [ 11%]
-tests/test_file_system_ops.py::test_perform_file_actions_conflict_skip PASSED [ 13%]
-tests/test_file_system_ops.py::test_perform_file_actions_conflict_fail PASSED [ 15%]
-tests/test_file_system_ops.py::test_perform_file_actions_conflict_overwrite PASSED [ 16%]
-tests/test_file_system_ops.py::test_perform_file_actions_conflict_suffix PASSED [ 18%]
-tests/test_renamer.py::test_plan_rename_simple_series_no_folders PASSED  [ 20%]
-tests/test_renamer.py::test_plan_rename_movie_with_folders PASSED        [ 22%]
-tests/test_renamer.py::test_plan_rename_multi_episode_series_folders PASSED [ 23%]
-tests/test_renamer.py::test_plan_rename_no_change PASSED                 [ 25%]
-tests/test_renamer.py::test_plan_rename_conflict_skip PASSED             [ 27%]
-tests/test_renamer.py::test_plan_rename_conflict_fail PASSED             [ 28%]
-tests/test_renamer.py::test_plan_rename_conflict_overwrite_suffix PASSED [ 30%]
-tests/test_renamer.py::test_plan_rename_include_scene_tags PASSED        [ 32%]
-tests/test_utils.py::test_sanitize_filename[Valid Filename.mkv-Valid_Filename.mkv] PASSED [ 33%]
-tests/test_utils.py::test_sanitize_filename[File with<>:"/\\|?*chars.mp4-File_with_chars.mp4] PASSED [ 35%]
-tests/test_utils.py::test_sanitize_filename[  Leading and trailing spaces . .txt-Leading_and_trailing_spaces_._.txt] PASSED [ 37%]
-tests/test_utils.py::test_sanitize_filename[  Ends with spaces and dots . . -Ends_with_spaces_and_dots] PASSED [ 38%]
-tests/test_utils.py::test_sanitize_filename[Multiple___Underscores___.srt-Multiple_Underscores_.srt] PASSED [ 40%]
-tests/test_utils.py::test_sanitize_filename[.HiddenFile-.HiddenFile] PASSED [ 42%]
-tests/test_utils.py::test_sanitize_filename[-_invalid_name_] PASSED      [ 44%]
-tests/test_utils.py::test_sanitize_filename[<>:"/\\|?*-_invalid_underscores_] PASSED [ 45%]
-tests/test_utils.py::test_sanitize_filename[...-_invalid_dots_] PASSED   [ 47%]
-tests/test_utils.py::test_sanitize_filename[ . . . -_invalid_name_] PASSED [ 49%]
-tests/test_utils.py::test_sanitize_filename[___-_invalid_underscores_] PASSED [ 50%]
-tests/test_utils.py::test_extract_scene_tags[My.Show.S01E01.PROPER.mkv-tags_tuple0-expected_list0-.PROPER] PASSED [ 52%]
-tests/test_utils.py::test_extract_scene_tags[Movie.Title.2023.REPACK.1080p.mkv-tags_tuple1-expected_list1-.REPACK] PASSED [ 54%]
-tests/test_utils.py::test_extract_scene_tags[Another.S02E03.REAL.PROPER.mkv-tags_tuple2-expected_list2-.PROPER.REAL] PASSED [ 55%]
-tests/test_utils.py::test_extract_scene_tags[Show.S03E04.mkv-tags_tuple3-expected_list3-] PASSED [ 57%]
-tests/test_utils.py::test_extract_scene_tags[File.With.internal.Source.mkv-tags_tuple4-expected_list4-.INTERNAL] PASSED [ 59%]
-tests/test_utils.py::test_extract_scene_tags[No Tags Here-tags_tuple5-expected_list5-] PASSED [ 61%]
-tests/test_utils.py::test_extract_scene_tags[File.DC.LIMITED.mkv-tags_tuple6-expected_list6-.LIMITED.DC] PASSED [ 62%]
-tests/test_utils.py::test_extract_scene_tags[[Grp] Show.S01E01 (UNCUT) [1080p].mkv-tags_tuple7-expected_list7-.UNCUT] PASSED [ 64%]
-tests/test_utils.py::test_extract_scene_tags[Show.S01E01.CustomTag.mkv-tags_tuple8-expected_list8-] PASSED [ 66%]
-tests/test_utils.py::test_extract_scene_tags[File.proper.mkv-tags_tuple9-expected_list9-.PROPER] PASSED [ 67%]
-tests/test_utils.py::test_extract_scene_tags[File.ends.with.REAL-tags_tuple10-expected_list10-.REAL] PASSED [ 69%]
-tests/test_utils.py::test_extract_scene_tags[LIMITED.file.starts.with.it.mkv-tags_tuple11-expected_list11-.LIMITED] PASSED [ 71%]
-tests/test_utils.py::test_extract_scene_tags[Two.Tags.LIMITED.REPACK.File.mkv-tags_tuple12-expected_list12-.REPACK.LIMITED] PASSED [ 72%]
-tests/test_utils.py::test_parse_subtitle_language[sub.eng.srt-eng-expected_flags0] PASSED [ 74%]
-tests/test_utils.py::test_parse_subtitle_language[sub.en.srt-eng-expected_flags1] PASSED [ 76%]
-tests/test_utils.py::test_parse_subtitle_language[subtitle.fre.forced.sub-fra-expected_flags2] PASSED [ 77%]
-tests/test_utils.py::test_parse_subtitle_language[mysub.spa.sdh.cc.vtt-spa-expected_flags3] PASSED [ 79%]
-tests/test_utils.py::test_parse_subtitle_language[NoLang.srt-None-expected_flags4] PASSED [ 81%]
-tests/test_utils.py::test_parse_subtitle_language[Foreign.Name.German.Forced.srt-deu-expected_flags5] PASSED [ 83%]
-tests/test_utils.py::test_parse_subtitle_language[Weird.Separator-jpn_sdh.ass-jpn-expected_flags6] PASSED [ 84%]
-tests/test_utils.py::test_parse_subtitle_language[Movie.Title.pt-BR.srt-por-expected_flags7] PASSED [ 86%]
-tests/test_utils.py::test_parse_subtitle_language[Movie.Title.pt.BR.srt-None-expected_flags8] PASSED [ 88%]
-tests/test_utils.py::test_parse_subtitle_language[Movie.Title.pob.srt-por-expected_flags9] PASSED [ 89%]
-tests/test_utils.py::test_parse_subtitle_language[Movie.Title.BR.srt-None-expected_flags10] PASSED [ 91%]
-tests/test_utils.py::test_parse_subtitle_language[My.Show.S01E01.720p.BluRay.x264-GRP.cze.forced.srt-ces-expected_flags11] PASSED [ 93%]
-tests/test_utils.py::test_parse_subtitle_language[Show.S01.E01.FR.srt-fra-expected_flags12] PASSED [ 94%]
-tests/test_utils.py::test_parse_subtitle_language[Show Name S01E01 Espa\xf1ol SDH.srt-spa-expected_flags13] PASSED [ 96%]
-tests/test_utils.py::test_scan_media_files_simple PASSED                 [ 98%]
-tests/test_utils.py::test_scan_media_files_recursive PASSED              [100%]
-
-=================================== FAILURES ===================================
-___________________ test_perform_file_actions_dry_run_rename ___________________
-
-tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-103/test_perform_file_actions_dry_0')
-mock_cfg_helper = <tests.conftest.mock_cfg_helper.<locals>.MockConfigHelper object at 0x103686e40>
-mock_undo_manager = <MagicMock spec='UndoManager' id='4352143248'>
-mocker = <pytest_mock.plugin.MockerFixture object at 0x103686660>
-
-    def test_perform_file_actions_dry_run_rename(tmp_path, mock_cfg_helper, mock_undo_manager, mocker):
-        mock_shutil_move = mocker.patch('shutil.move'); mock_path_rename = mocker.patch('pathlib.Path.rename'); mock_mkdir = mocker.patch('pathlib.Path.mkdir')
-        mock_cfg_helper.args.dry_run = True; mock_cfg_helper.args.backup_dir = None; mock_cfg_helper.args.stage_dir = None; mock_cfg_helper.args.use_trash = False
-        mock_cfg_helper.manager._mock_values = {'create_folders': False, 'on_conflict': 'skip'}
-        plan = create_test_plan(tmp_path, actions=[("old_video.mkv", "new_video.mkv", 'file', 'rename'), ("old_video.nfo", "new_video.nfo", 'file', 'rename')])
-        plan.actions[0].original_path.write_text("mkv"); plan.actions[1].original_path.write_text("nfo") # Use write_text
-        mock_mkdir.reset_mock()
-        result = file_system_ops.perform_file_actions(plan, mock_cfg_helper.args, mock_cfg_helper, mock_undo_manager)
->       assert result['success'] is True; assert result['actions_taken'] == 0; assert "DRY RUN: Would rename 'old_video.mkv' -> " in result['message']; assert "DRY RUN: Would rename 'old_video.nfo' -> " in result['message']
-E       assert "DRY RUN: Would rename 'old_video.mkv' -> " in ''
-
-tests/test_file_system_ops.py:53: AssertionError
-______________ test_perform_file_actions_dry_run_move_create_dir _______________
-
-tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-103/test_perform_file_actions_dry_1')
-mock_cfg_helper = <tests.conftest.mock_cfg_helper.<locals>.MockConfigHelper object at 0x1037601a0>
-mock_undo_manager = <MagicMock spec='UndoManager' id='4353034624'>
-mocker = <pytest_mock.plugin.MockerFixture object at 0x1037d0050>
-
-    def test_perform_file_actions_dry_run_move_create_dir(tmp_path, mock_cfg_helper, mock_undo_manager, mocker):
-        mock_shutil_move = mocker.patch('shutil.move'); mock_mkdir = mocker.patch('pathlib.Path.mkdir')
-        mock_cfg_helper.args.dry_run = True; mock_cfg_helper.args.backup_dir = None; mock_cfg_helper.args.stage_dir = None; mock_cfg_helper.args.use_trash = False
-        mock_cfg_helper.manager._mock_values = {'create_folders': True, 'on_conflict': 'skip'}
-        plan = create_test_plan(tmp_path, actions=[ ("original/vid.mkv", "New Name.mkv", 'file', 'move'), ("original/vid.srt", "New Name.srt", 'file', 'move')], created_dir="New Folder/Subfolder")
-        # Use write_text which handles parent creation
->       plan.actions[0].original_path.write_text("mkv content")
-
-tests/test_file_system_ops.py:63: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_local.py:555: in write_text
-    return PathBase.write_text(self, data, encoding, errors, newline)
-/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_abc.py:651: in write_text
-    with self.open(mode='w', encoding=encoding, errors=errors, newline=newline) as f:
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-
-self = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-103/test_perform_file_actions_dry_1/original/vid.mkv')
-mode = 'w', buffering = -1, encoding = 'locale', errors = None, newline = None
-
-    def open(self, mode='r', buffering=-1, encoding=None,
-             errors=None, newline=None):
-        """
-        Open the file pointed to by this path and return a file object, as
-        the built-in open() function does.
-        """
-        if "b" not in mode:
-            encoding = io.text_encoding(encoding)
->       return io.open(self, mode, buffering, encoding, errors, newline)
-E       FileNotFoundError: [Errno 2] No such file or directory: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-103/test_perform_file_actions_dry_1/original/vid.mkv'
-
-/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_local.py:537: FileNotFoundError
-________________ test_perform_file_actions_live_move_create_dir ________________
-
-tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-103/test_perform_file_actions_live1')
-mock_cfg_helper = <tests.conftest.mock_cfg_helper.<locals>.MockConfigHelper object at 0x103761be0>
-mock_undo_manager = <MagicMock spec='UndoManager' id='4353039664'>
-mocker = <pytest_mock.plugin.MockerFixture object at 0x1036bde00>
-
-    def test_perform_file_actions_live_move_create_dir(tmp_path, mock_cfg_helper, mock_undo_manager, mocker):
-        # Arrange: Let file operations run
-        mock_cfg_helper.args.dry_run = False; mock_cfg_helper.args.backup_dir = None; mock_cfg_helper.args.stage_dir = None; mock_cfg_helper.args.use_trash = False
-        mock_cfg_helper.manager._mock_values = {'create_folders': True, 'on_conflict': 'skip', 'enable_undo': True}
-        plan = create_test_plan(tmp_path, actions=[("old/vid.mkv", "New Name.mkv", 'file', 'move')], created_dir="New Dir")
-        orig_path = plan.actions[0].original_path; final_path = plan.actions[0].new_path; created_dir_path = plan.created_dir_path
-        # Create source file using write_text (handles parent creation)
->       orig_path.write_text("content")
-
-tests/test_file_system_ops.py:95: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_local.py:555: in write_text
-    return PathBase.write_text(self, data, encoding, errors, newline)
-/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_abc.py:651: in write_text
-    with self.open(mode='w', encoding=encoding, errors=errors, newline=newline) as f:
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-
-self = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-103/test_perform_file_actions_live1/old/vid.mkv')
-mode = 'w', buffering = -1, encoding = 'locale', errors = None, newline = None
-
-    def open(self, mode='r', buffering=-1, encoding=None,
-             errors=None, newline=None):
-        """
-        Open the file pointed to by this path and return a file object, as
-        the built-in open() function does.
-        """
-        if "b" not in mode:
-            encoding = io.text_encoding(encoding)
->       return io.open(self, mode, buffering, encoding, errors, newline)
-E       FileNotFoundError: [Errno 2] No such file or directory: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-103/test_perform_file_actions_live1/old/vid.mkv'
-
-/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_local.py:537: FileNotFoundError
+==================================== ERRORS ====================================
+________________ ERROR collecting tests/test_file_system_ops.py ________________
+ImportError while importing test module '/Users/alexmunroe/Development/Gemini-Renamer/tests/test_file_system_ops.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/test_file_system_ops.py:9: in <module>
+    from gemini_renamer.renamer import Action, RenamePlan
+E   ModuleNotFoundError: No module named 'gemini_renamer'
 =========================== short test summary info ============================
-FAILED tests/test_file_system_ops.py::test_perform_file_actions_dry_run_rename
-FAILED tests/test_file_system_ops.py::test_perform_file_actions_dry_run_move_create_dir
-FAILED tests/test_file_system_ops.py::test_perform_file_actions_live_move_create_dir
-========================= 3 failed, 56 passed in 0.56s =========================
+ERROR tests/test_file_system_ops.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+=============================== 1 error in 0.30s ===============================
