@@ -1,0 +1,24 @@
+# pyproject.toml
+
+[tool.pytest.ini_options]
+# Add other pytest options if needed
+addopts = "--cov=rename_app" # Add default cov flags
+
+[tool.coverage.run]
+source = ["rename_app"]  # Explicitly define the source directory
+#omit = [
+#    "tests/*",             # Exclude test files themselves
+#    "rename_app/__main__.py", # Example: Exclude CLI entry point if needed
+#    "*/__init__.py",       # Often exclude empty init files
+#    # Add other files/patterns to exclude from coverage measurement
+#]
+branch = true # Enable branch coverage measurement (important!)
+
+[tool.coverage.report]
+show_missing = true      # Always show missing lines in terminal report
+fail_under = 85          # Optional: Fail the build if coverage drops below 85%
+skip_covered = true      # Optional: Don't list 100% covered files in terminal
+# precision = 2          # Optional: decimal places for percentage
+
+[tool.coverage.html]
+directory = "coverage_html_report" # Optional: change output directory name
