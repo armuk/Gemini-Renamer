@@ -96,7 +96,9 @@ def test_perform_file_actions_dry_run_move_create_dir(tmp_path, mock_cfg_helper,
     mock_cfg_helper.manager._mock_values = {'create_folders': True, 'on_conflict': 'skip'}
     plan = create_test_plan(tmp_path, actions=[ ("original/vid.mkv", "New Name.mkv", 'file', 'move'), ("original/vid.srt", "New Name.srt", 'file', 'move')], created_dir="New Folder/Subfolder")
     # Use write_text which handles parent creation implicitly
+    plan.actions[0].original_path.parent.mkdir(parents=True, exist_ok=True)
     plan.actions[0].original_path.write_text("mkv content")
+    plan.actions[1].original_path.parent.mkdir(parents=True, exist_ok=True)
     plan.actions[1].original_path.write_text("srt content")
     # mock_mkdir.reset_mock() # No mock to reset
     # Act
@@ -141,6 +143,7 @@ def test_perform_file_actions_live_move_create_dir(tmp_path, mock_cfg_helper, mo
     plan = create_test_plan(tmp_path, actions=[("old/vid.mkv", "New Name.mkv", 'file', 'move')], created_dir="New Dir")
     orig_path = plan.actions[0].original_path; final_path = plan.actions[0].new_path; created_dir_path = plan.created_dir_path
     # Create source file using write_text (handles parent creation)
+    orig_path.parent.mkdir(parents=True, exist_ok=True)
     orig_path.write_text("content")
     # Ensure target directory does NOT exist before test
     if created_dir_path.is_dir(): shutil.rmtree(created_dir_path)
