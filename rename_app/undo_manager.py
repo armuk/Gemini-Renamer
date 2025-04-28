@@ -18,6 +18,20 @@ class UndoManager:
         if self.is_enabled:
             self._init_db()
 
+    def prune_old_batches(self):
+        """Remove expired undo batches from the database."""
+        expire_days = int(self.cfg_helper('undo_expire_days', 30))
+        if expire_days <= 0:
+            return
+
+        cutoff = datetime.now() - timedelta(days=expire_days)
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM undo_log WHERE timestamp < ?", 
+                (cutoff.isoformat(),)
+            )
+            conn.commit()
+
     def _resolve_db_path(self):
         # Allow configuring DB path? For now, keep it simple.
         # Use cfg helper to get potential configured path

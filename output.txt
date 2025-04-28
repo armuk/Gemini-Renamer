@@ -2,153 +2,316 @@
 platform darwin -- Python 3.13.3, pytest-8.3.5, pluggy-1.5.0 -- /Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13
 cachedir: .pytest_cache
 rootdir: /Users/alexmunroe/Development/Gemini-Renamer
-plugins: mock-3.14.0
-collecting ... collected 59 items
+plugins: mock-3.14.0, cov-6.1.1
+collecting ... collected 77 items
 
-tests/test_file_system_ops.py::test_perform_file_actions_dry_run_rename PASSED [  1%]
-tests/test_file_system_ops.py::test_perform_file_actions_dry_run_move_create_dir FAILED [  3%]
-tests/test_file_system_ops.py::test_perform_file_actions_live_rename PASSED [  5%]
-tests/test_file_system_ops.py::test_perform_file_actions_live_move_create_dir FAILED [  6%]
-tests/test_file_system_ops.py::test_perform_file_actions_live_trash PASSED [  8%]
-tests/test_file_system_ops.py::test_perform_file_actions_live_backup PASSED [ 10%]
-tests/test_file_system_ops.py::test_perform_file_actions_live_stage PASSED [ 11%]
-tests/test_file_system_ops.py::test_perform_file_actions_conflict_skip PASSED [ 13%]
-tests/test_file_system_ops.py::test_perform_file_actions_conflict_fail PASSED [ 15%]
-tests/test_file_system_ops.py::test_perform_file_actions_conflict_overwrite PASSED [ 16%]
-tests/test_file_system_ops.py::test_perform_file_actions_conflict_suffix PASSED [ 18%]
-tests/test_renamer.py::test_plan_rename_simple_series_no_folders PASSED  [ 20%]
-tests/test_renamer.py::test_plan_rename_movie_with_folders PASSED        [ 22%]
-tests/test_renamer.py::test_plan_rename_multi_episode_series_folders PASSED [ 23%]
+tests/test_cli.py::test_parse_arguments_minimal PASSED                   [  1%]
+tests/test_cli.py::test_parse_arguments_with_flags PASSED                [  2%]
+tests/test_cli.py::test_parse_arguments_undo_command PASSED              [  3%]
+tests/test_cli.py::test_parse_arguments_missing_command PASSED           [  5%]
+tests/test_cli.py::test_help_message PASSED                              [  6%]
+tests/test_file_system_ops.py::test_perform_file_actions_dry_run_rename PASSED [  7%]
+tests/test_file_system_ops.py::test_perform_file_actions_dry_run_move_create_dir PASSED [  9%]
+tests/test_file_system_ops.py::test_perform_file_actions_live_rename PASSED [ 10%]
+tests/test_file_system_ops.py::test_perform_file_actions_live_move_create_dir PASSED [ 11%]
+tests/test_file_system_ops.py::test_perform_file_actions_live_trash PASSED [ 12%]
+tests/test_file_system_ops.py::test_perform_file_actions_live_backup PASSED [ 14%]
+tests/test_file_system_ops.py::test_perform_file_actions_live_stage PASSED [ 15%]
+tests/test_file_system_ops.py::test_perform_file_actions_conflict_skip PASSED [ 16%]
+tests/test_file_system_ops.py::test_perform_file_actions_conflict_fail PASSED [ 18%]
+tests/test_file_system_ops.py::test_perform_file_actions_conflict_overwrite PASSED [ 19%]
+tests/test_file_system_ops.py::test_perform_file_actions_conflict_suffix PASSED [ 20%]
+tests/test_renamer.py::test_plan_rename_simple_series_no_folders PASSED  [ 22%]
+tests/test_renamer.py::test_plan_rename_movie_with_folders PASSED        [ 23%]
+tests/test_renamer.py::test_plan_rename_multi_episode_series_folders PASSED [ 24%]
 tests/test_renamer.py::test_plan_rename_no_change PASSED                 [ 25%]
 tests/test_renamer.py::test_plan_rename_conflict_skip PASSED             [ 27%]
 tests/test_renamer.py::test_plan_rename_conflict_fail PASSED             [ 28%]
-tests/test_renamer.py::test_plan_rename_conflict_overwrite_suffix PASSED [ 30%]
-tests/test_renamer.py::test_plan_rename_include_scene_tags PASSED        [ 32%]
-tests/test_utils.py::test_sanitize_filename[Valid Filename.mkv-Valid_Filename.mkv] PASSED [ 33%]
-tests/test_utils.py::test_sanitize_filename[File with<>:"/\\|?*chars.mp4-File_with_chars.mp4] PASSED [ 35%]
-tests/test_utils.py::test_sanitize_filename[  Leading and trailing spaces . .txt-Leading_and_trailing_spaces_._.txt] PASSED [ 37%]
-tests/test_utils.py::test_sanitize_filename[  Ends with spaces and dots . . -Ends_with_spaces_and_dots] PASSED [ 38%]
-tests/test_utils.py::test_sanitize_filename[Multiple___Underscores___.srt-Multiple_Underscores_.srt] PASSED [ 40%]
-tests/test_utils.py::test_sanitize_filename[.HiddenFile-.HiddenFile] PASSED [ 42%]
-tests/test_utils.py::test_sanitize_filename[-_invalid_name_] PASSED      [ 44%]
-tests/test_utils.py::test_sanitize_filename[<>:"/\\|?*-_invalid_underscores_] PASSED [ 45%]
-tests/test_utils.py::test_sanitize_filename[...-_invalid_dots_] PASSED   [ 47%]
-tests/test_utils.py::test_sanitize_filename[ . . . -_invalid_name_] PASSED [ 49%]
-tests/test_utils.py::test_sanitize_filename[___-_invalid_underscores_] PASSED [ 50%]
-tests/test_utils.py::test_extract_scene_tags[My.Show.S01E01.PROPER.mkv-tags_tuple0-expected_list0-.PROPER] PASSED [ 52%]
-tests/test_utils.py::test_extract_scene_tags[Movie.Title.2023.REPACK.1080p.mkv-tags_tuple1-expected_list1-.REPACK] PASSED [ 54%]
-tests/test_utils.py::test_extract_scene_tags[Another.S02E03.REAL.PROPER.mkv-tags_tuple2-expected_list2-.PROPER.REAL] PASSED [ 55%]
-tests/test_utils.py::test_extract_scene_tags[Show.S03E04.mkv-tags_tuple3-expected_list3-] PASSED [ 57%]
-tests/test_utils.py::test_extract_scene_tags[File.With.internal.Source.mkv-tags_tuple4-expected_list4-.INTERNAL] PASSED [ 59%]
-tests/test_utils.py::test_extract_scene_tags[No Tags Here-tags_tuple5-expected_list5-] PASSED [ 61%]
-tests/test_utils.py::test_extract_scene_tags[File.DC.LIMITED.mkv-tags_tuple6-expected_list6-.LIMITED.DC] PASSED [ 62%]
-tests/test_utils.py::test_extract_scene_tags[[Grp] Show.S01E01 (UNCUT) [1080p].mkv-tags_tuple7-expected_list7-.UNCUT] PASSED [ 64%]
-tests/test_utils.py::test_extract_scene_tags[Show.S01E01.CustomTag.mkv-tags_tuple8-expected_list8-] PASSED [ 66%]
-tests/test_utils.py::test_extract_scene_tags[File.proper.mkv-tags_tuple9-expected_list9-.PROPER] PASSED [ 67%]
-tests/test_utils.py::test_extract_scene_tags[File.ends.with.REAL-tags_tuple10-expected_list10-.REAL] PASSED [ 69%]
-tests/test_utils.py::test_extract_scene_tags[LIMITED.file.starts.with.it.mkv-tags_tuple11-expected_list11-.LIMITED] PASSED [ 71%]
-tests/test_utils.py::test_extract_scene_tags[Two.Tags.LIMITED.REPACK.File.mkv-tags_tuple12-expected_list12-.REPACK.LIMITED] PASSED [ 72%]
-tests/test_utils.py::test_parse_subtitle_language[sub.eng.srt-eng-expected_flags0] PASSED [ 74%]
-tests/test_utils.py::test_parse_subtitle_language[sub.en.srt-eng-expected_flags1] PASSED [ 76%]
-tests/test_utils.py::test_parse_subtitle_language[subtitle.fre.forced.sub-fra-expected_flags2] PASSED [ 77%]
-tests/test_utils.py::test_parse_subtitle_language[mysub.spa.sdh.cc.vtt-spa-expected_flags3] PASSED [ 79%]
-tests/test_utils.py::test_parse_subtitle_language[NoLang.srt-None-expected_flags4] PASSED [ 81%]
-tests/test_utils.py::test_parse_subtitle_language[Foreign.Name.German.Forced.srt-deu-expected_flags5] PASSED [ 83%]
-tests/test_utils.py::test_parse_subtitle_language[Weird.Separator-jpn_sdh.ass-jpn-expected_flags6] PASSED [ 84%]
-tests/test_utils.py::test_parse_subtitle_language[Movie.Title.pt-BR.srt-por-expected_flags7] PASSED [ 86%]
-tests/test_utils.py::test_parse_subtitle_language[Movie.Title.pt.BR.srt-None-expected_flags8] PASSED [ 88%]
-tests/test_utils.py::test_parse_subtitle_language[Movie.Title.pob.srt-por-expected_flags9] PASSED [ 89%]
-tests/test_utils.py::test_parse_subtitle_language[Movie.Title.BR.srt-None-expected_flags10] PASSED [ 91%]
-tests/test_utils.py::test_parse_subtitle_language[My.Show.S01E01.720p.BluRay.x264-GRP.cze.forced.srt-ces-expected_flags11] PASSED [ 93%]
-tests/test_utils.py::test_parse_subtitle_language[Show.S01.E01.FR.srt-fra-expected_flags12] PASSED [ 94%]
-tests/test_utils.py::test_parse_subtitle_language[Show Name S01E01 Espa\xf1ol SDH.srt-spa-expected_flags13] PASSED [ 96%]
+tests/test_renamer.py::test_plan_rename_conflict_overwrite_suffix PASSED [ 29%]
+tests/test_renamer.py::test_plan_rename_include_scene_tags PASSED        [ 31%]
+tests/test_undo_manager.py::test_connect_success PASSED                  [ 32%]
+tests/test_undo_manager.py::test_connect_failure FAILED                  [ 33%]
+tests/test_undo_manager.py::test_log_action_success PASSED               [ 35%]
+tests/test_undo_manager.py::test_update_action_status_success PASSED     [ 36%]
+tests/test_undo_manager.py::test_update_action_status_failure FAILED     [ 37%]
+tests/test_undo_manager.py::test_record_and_undo_move FAILED             [ 38%]
+tests/test_undo_manager.py::test_record_and_undo_trash FAILED            [ 40%]
+tests/test_undo_manager.py::test_batch_undo_multiple_actions FAILED      [ 41%]
+tests/test_undo_manager.py::test_undo_with_missing_file PASSED           [ 42%]
+tests/test_undo_manager.py::test_undo_does_not_crash_with_empty_log PASSED [ 44%]
+tests/test_undo_manager.py::test_remove_empty_directory FAILED           [ 45%]
+tests/test_undo_manager.py::test_skip_nonempty_directory_removal FAILED  [ 46%]
+tests/test_undo_manager.py::test_prune_expired_batches FAILED            [ 48%]
+tests/test_utils.py::test_sanitize_filename[Valid Filename.mkv-Valid_Filename.mkv] PASSED [ 49%]
+tests/test_utils.py::test_sanitize_filename[File with<>:"/\\|?*chars.mp4-File_with_chars.mp4] PASSED [ 50%]
+tests/test_utils.py::test_sanitize_filename[  Leading and trailing spaces . .txt-Leading_and_trailing_spaces_._.txt] PASSED [ 51%]
+tests/test_utils.py::test_sanitize_filename[  Ends with spaces and dots . . -Ends_with_spaces_and_dots] PASSED [ 53%]
+tests/test_utils.py::test_sanitize_filename[Multiple___Underscores___.srt-Multiple_Underscores_.srt] PASSED [ 54%]
+tests/test_utils.py::test_sanitize_filename[.HiddenFile-.HiddenFile] PASSED [ 55%]
+tests/test_utils.py::test_sanitize_filename[-_invalid_name_] PASSED      [ 57%]
+tests/test_utils.py::test_sanitize_filename[<>:"/\\|?*-_invalid_underscores_] PASSED [ 58%]
+tests/test_utils.py::test_sanitize_filename[...-_invalid_dots_] PASSED   [ 59%]
+tests/test_utils.py::test_sanitize_filename[ . . . -_invalid_name_] PASSED [ 61%]
+tests/test_utils.py::test_sanitize_filename[___-_invalid_underscores_] PASSED [ 62%]
+tests/test_utils.py::test_extract_scene_tags[My.Show.S01E01.PROPER.mkv-tags_tuple0-expected_list0-.PROPER] PASSED [ 63%]
+tests/test_utils.py::test_extract_scene_tags[Movie.Title.2023.REPACK.1080p.mkv-tags_tuple1-expected_list1-.REPACK] PASSED [ 64%]
+tests/test_utils.py::test_extract_scene_tags[Another.S02E03.REAL.PROPER.mkv-tags_tuple2-expected_list2-.PROPER.REAL] PASSED [ 66%]
+tests/test_utils.py::test_extract_scene_tags[Show.S03E04.mkv-tags_tuple3-expected_list3-] PASSED [ 67%]
+tests/test_utils.py::test_extract_scene_tags[File.With.internal.Source.mkv-tags_tuple4-expected_list4-.INTERNAL] PASSED [ 68%]
+tests/test_utils.py::test_extract_scene_tags[No Tags Here-tags_tuple5-expected_list5-] PASSED [ 70%]
+tests/test_utils.py::test_extract_scene_tags[File.DC.LIMITED.mkv-tags_tuple6-expected_list6-.LIMITED.DC] PASSED [ 71%]
+tests/test_utils.py::test_extract_scene_tags[[Grp] Show.S01E01 (UNCUT) [1080p].mkv-tags_tuple7-expected_list7-.UNCUT] PASSED [ 72%]
+tests/test_utils.py::test_extract_scene_tags[Show.S01E01.CustomTag.mkv-tags_tuple8-expected_list8-] PASSED [ 74%]
+tests/test_utils.py::test_extract_scene_tags[File.proper.mkv-tags_tuple9-expected_list9-.PROPER] PASSED [ 75%]
+tests/test_utils.py::test_extract_scene_tags[File.ends.with.REAL-tags_tuple10-expected_list10-.REAL] PASSED [ 76%]
+tests/test_utils.py::test_extract_scene_tags[LIMITED.file.starts.with.it.mkv-tags_tuple11-expected_list11-.LIMITED] PASSED [ 77%]
+tests/test_utils.py::test_extract_scene_tags[Two.Tags.LIMITED.REPACK.File.mkv-tags_tuple12-expected_list12-.REPACK.LIMITED] PASSED [ 79%]
+tests/test_utils.py::test_parse_subtitle_language[sub.eng.srt-eng-expected_flags0] PASSED [ 80%]
+tests/test_utils.py::test_parse_subtitle_language[sub.en.srt-eng-expected_flags1] PASSED [ 81%]
+tests/test_utils.py::test_parse_subtitle_language[subtitle.fre.forced.sub-fra-expected_flags2] PASSED [ 83%]
+tests/test_utils.py::test_parse_subtitle_language[mysub.spa.sdh.cc.vtt-spa-expected_flags3] PASSED [ 84%]
+tests/test_utils.py::test_parse_subtitle_language[NoLang.srt-None-expected_flags4] PASSED [ 85%]
+tests/test_utils.py::test_parse_subtitle_language[Foreign.Name.German.Forced.srt-deu-expected_flags5] PASSED [ 87%]
+tests/test_utils.py::test_parse_subtitle_language[Weird.Separator-jpn_sdh.ass-jpn-expected_flags6] PASSED [ 88%]
+tests/test_utils.py::test_parse_subtitle_language[Movie.Title.pt-BR.srt-por-expected_flags7] PASSED [ 89%]
+tests/test_utils.py::test_parse_subtitle_language[Movie.Title.pt.BR.srt-None-expected_flags8] PASSED [ 90%]
+tests/test_utils.py::test_parse_subtitle_language[Movie.Title.pob.srt-por-expected_flags9] PASSED [ 92%]
+tests/test_utils.py::test_parse_subtitle_language[Movie.Title.BR.srt-None-expected_flags10] PASSED [ 93%]
+tests/test_utils.py::test_parse_subtitle_language[My.Show.S01E01.720p.BluRay.x264-GRP.cze.forced.srt-ces-expected_flags11] PASSED [ 94%]
+tests/test_utils.py::test_parse_subtitle_language[Show.S01.E01.FR.srt-fra-expected_flags12] PASSED [ 96%]
+tests/test_utils.py::test_parse_subtitle_language[Show Name S01E01 Espa\xf1ol SDH.srt-spa-expected_flags13] PASSED [ 97%]
 tests/test_utils.py::test_scan_media_files_simple PASSED                 [ 98%]
 tests/test_utils.py::test_scan_media_files_recursive PASSED              [100%]
 
 =================================== FAILURES ===================================
-______________ test_perform_file_actions_dry_run_move_create_dir _______________
+_____________________________ test_connect_failure _____________________________
 
-tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-118/test_perform_file_actions_dry_1')
-mock_cfg_helper = <tests.conftest.mock_cfg_helper.<locals>.MockConfigHelper object at 0x10c8f2ba0>
-mock_undo_manager = <MagicMock spec='UndoManager' id='4505676368'>
-mocker = <pytest_mock.plugin.MockerFixture object at 0x10c8d3890>
+mocker = <pytest_mock.plugin.MockerFixture object at 0x110a942c0>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_connect_failure0')
 
-    def test_perform_file_actions_dry_run_move_create_dir(tmp_path, mock_cfg_helper, mock_undo_manager, mocker):
-        """Test dry run involving moving files and creating a directory."""
-        # Arrange
-        mock_shutil_move = mocker.patch('shutil.move')
-        # Don't mock mkdir for this dry run test, allow helper to ensure target parent exists if needed
-        # mock_mkdir = mocker.patch('pathlib.Path.mkdir')
-        mock_cfg_helper.args.dry_run = True; mock_cfg_helper.args.backup_dir = None; mock_cfg_helper.args.stage_dir = None; mock_cfg_helper.args.use_trash = False
-        mock_cfg_helper.manager._mock_values = {'create_folders': True, 'on_conflict': 'skip'}
-        plan = create_test_plan(tmp_path, actions=[ ("original/vid.mkv", "New Name.mkv", 'file', 'move'), ("original/vid.srt", "New Name.srt", 'file', 'move')], created_dir="New Folder/Subfolder")
-        # Use write_text which handles parent creation implicitly
->       plan.actions[0].original_path.write_text("mkv content")
+    def test_connect_failure(mocker, tmp_path):
+        broken_cfg = MagicMock()
+        broken_cfg.side_effect = lambda k, d=None: {
+            'enable_undo': True,
+            'undo_db_path': str(tmp_path / "broken.db")
+        }.get(k, d)
+        mocker.patch("sqlite3.connect", side_effect=Exception("Cannot create"))
+        with pytest.raises(RenamerError):
+>           UndoManager(cfg_helper=broken_cfg)
 
-tests/test_file_system_ops.py:99: 
+tests/test_undo_manager.py:32: 
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_local.py:555: in write_text
-    return PathBase.write_text(self, data, encoding, errors, newline)
-/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_abc.py:651: in write_text
-    with self.open(mode='w', encoding=encoding, errors=errors, newline=newline) as f:
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-
-self = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-118/test_perform_file_actions_dry_1/original/vid.mkv')
-mode = 'w', buffering = -1, encoding = 'locale', errors = None, newline = None
-
-    def open(self, mode='r', buffering=-1, encoding=None,
-             errors=None, newline=None):
-        """
-        Open the file pointed to by this path and return a file object, as
-        the built-in open() function does.
-        """
-        if "b" not in mode:
-            encoding = io.text_encoding(encoding)
->       return io.open(self, mode, buffering, encoding, errors, newline)
-E       FileNotFoundError: [Errno 2] No such file or directory: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-118/test_perform_file_actions_dry_1/original/vid.mkv'
-
-/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_local.py:537: FileNotFoundError
-________________ test_perform_file_actions_live_move_create_dir ________________
-
-tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-118/test_perform_file_actions_live1')
-mock_cfg_helper = <tests.conftest.mock_cfg_helper.<locals>.MockConfigHelper object at 0x10c9d81a0>
-mock_undo_manager = <MagicMock spec='UndoManager' id='4506616560'>
-mocker = <pytest_mock.plugin.MockerFixture object at 0x10bb8f5c0>
-
-    def test_perform_file_actions_live_move_create_dir(tmp_path, mock_cfg_helper, mock_undo_manager, mocker):
-        """Test live run moving files and creating directory."""
-        # Arrange: Let file operations run
-        mock_cfg_helper.args.dry_run = False; mock_cfg_helper.args.backup_dir = None; mock_cfg_helper.args.stage_dir = None; mock_cfg_helper.args.use_trash = False
-        mock_cfg_helper.manager._mock_values = {'create_folders': True, 'on_conflict': 'skip', 'enable_undo': True}
-        plan = create_test_plan(tmp_path, actions=[("old/vid.mkv", "New Name.mkv", 'file', 'move')], created_dir="New Dir")
-        orig_path = plan.actions[0].original_path; final_path = plan.actions[0].new_path; created_dir_path = plan.created_dir_path
-        # Create source file using write_text (handles parent creation)
->       orig_path.write_text("content")
-
-tests/test_file_system_ops.py:144: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_local.py:555: in write_text
-    return PathBase.write_text(self, data, encoding, errors, newline)
-/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_abc.py:651: in write_text
-    with self.open(mode='w', encoding=encoding, errors=errors, newline=newline) as f:
+rename_app/undo_manager.py:19: in __init__
+    self._init_db()
+rename_app/undo_manager.py:70: in _init_db
+    with self._connect() as conn:
+rename_app/undo_manager.py:54: in _connect
+    conn = sqlite3.connect(self.db_path, timeout=10.0) # Added timeout
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1169: in __call__
+    return self._mock_call(*args, **kwargs)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1173: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
 
-self = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-118/test_perform_file_actions_live1/old/vid.mkv')
-mode = 'w', buffering = -1, encoding = 'locale', errors = None, newline = None
+self = <MagicMock name='connect' id='4575645712'>
+args = (PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_connect_failure0/broken.db'),)
+kwargs = {'timeout': 10.0}, effect = Exception('Cannot create')
 
-    def open(self, mode='r', buffering=-1, encoding=None,
-             errors=None, newline=None):
-        """
-        Open the file pointed to by this path and return a file object, as
-        the built-in open() function does.
-        """
-        if "b" not in mode:
-            encoding = io.text_encoding(encoding)
->       return io.open(self, mode, buffering, encoding, errors, newline)
-E       FileNotFoundError: [Errno 2] No such file or directory: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-118/test_perform_file_actions_live1/old/vid.mkv'
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+>               raise effect
+E               Exception: Cannot create
 
-/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_local.py:537: FileNotFoundError
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1228: Exception
+______________________ test_update_action_status_failure _______________________
+
+undo_manager = <rename_app.undo_manager.UndoManager object at 0x110d50640>
+
+    def test_update_action_status_failure(undo_manager):
+>       with pytest.raises(RenamerError):
+E       Failed: DID NOT RAISE <class 'rename_app.exceptions.RenamerError'>
+
+tests/test_undo_manager.py:53: Failed
+__________________________ test_record_and_undo_move ___________________________
+
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_move0')
+undo_manager = <rename_app.undo_manager.UndoManager object at 0x110a17d10>
+mocker = <pytest_mock.plugin.MockerFixture object at 0x1109c2750>
+
+    def test_record_and_undo_move(tmp_path, undo_manager, mocker):
+        src = tmp_path / "move.txt"
+        dest = tmp_path / "moved.txt"
+        src.write_text("hello")
+        src.rename(dest)
+        undo_manager.log_action("batch3", dest, src, 'file', 'renamed')
+    
+        mocker.patch("builtins.input", return_value="y")
+        undo_manager.perform_undo("batch3")
+    
+>       assert src.exists()
+E       AssertionError: assert False
+E        +  where False = exists()
+E        +    where exists = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_move0/move.txt').exists
+
+tests/test_undo_manager.py:70: AssertionError
+----------------------------- Captured stdout call -----------------------------
+Found 1 actions to revert for batch 'batch3'.
+Proposed reversions:
+  - Restore: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_move0/move.txt' -> '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_move0/moved.txt'
+Attempting to revert...
+Skipped revert: File to revert from does not exist: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_move0/move.txt'
+Cleaning up created directories (if empty)...
+------------------------------
+Undo Summary:
+  Actions successfully reverted: 0
+  Actions skipped (not found/exists/integrity): 0
+  Errors during revert: 1
+__________________________ test_record_and_undo_trash __________________________
+
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_trash0')
+undo_manager = <rename_app.undo_manager.UndoManager object at 0x1109cb9b0>
+mocker = <pytest_mock.plugin.MockerFixture object at 0x110ba64e0>
+
+    def test_record_and_undo_trash(tmp_path, undo_manager, mocker):
+        src = tmp_path / "deleted.txt"
+        trash = tmp_path / "trash" / "deleted.txt"
+        trash.parent.mkdir(parents=True, exist_ok=True)
+        src.write_text("goodbye")
+        src.rename(trash)
+    
+        undo_manager.log_action("batch4", trash, src, 'file', 'moved')
+    
+        mocker.patch("builtins.input", return_value="y")
+        undo_manager.perform_undo("batch4")
+    
+>       assert src.exists()
+E       AssertionError: assert False
+E        +  where False = exists()
+E        +    where exists = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_trash0/deleted.txt').exists
+
+tests/test_undo_manager.py:85: AssertionError
+----------------------------- Captured stdout call -----------------------------
+Found 1 actions to revert for batch 'batch4'.
+Proposed reversions:
+  - Restore: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_trash0/deleted.txt' -> '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_trash0/trash/deleted.txt'
+Attempting to revert...
+Skipped revert: File to revert from does not exist: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_trash0/deleted.txt'
+Cleaning up created directories (if empty)...
+------------------------------
+Undo Summary:
+  Actions successfully reverted: 0
+  Actions skipped (not found/exists/integrity): 0
+  Errors during revert: 1
+_______________________ test_batch_undo_multiple_actions _______________________
+
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_batch_undo_multiple_actio0')
+undo_manager = <rename_app.undo_manager.UndoManager object at 0x110d98e20>
+mocker = <pytest_mock.plugin.MockerFixture object at 0x110ba6820>
+
+    def test_batch_undo_multiple_actions(tmp_path, undo_manager, mocker):
+        file1 = tmp_path / "file1.txt"
+        file2 = tmp_path / "file2.txt"
+        moved1 = tmp_path / "file1_moved.txt"
+        moved2 = tmp_path / "file2_moved.txt"
+        file1.write_text("one")
+        file2.write_text("two")
+        file1.rename(moved1)
+        file2.rename(moved2)
+    
+        undo_manager.log_action("batch5", moved1, file1, 'file', 'renamed')
+        undo_manager.log_action("batch5", moved2, file2, 'file', 'renamed')
+    
+        mocker.patch("builtins.input", return_value="y")
+        undo_manager.perform_undo("batch5")
+    
+>       assert file1.exists()
+E       AssertionError: assert False
+E        +  where False = exists()
+E        +    where exists = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_batch_undo_multiple_actio0/file1.txt').exists
+
+tests/test_undo_manager.py:104: AssertionError
+----------------------------- Captured stdout call -----------------------------
+Found 2 actions to revert for batch 'batch5'.
+Proposed reversions:
+  - Restore: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_batch_undo_multiple_actio0/file2.txt' -> '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_batch_undo_multiple_actio0/file2_moved.txt'
+  - Restore: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_batch_undo_multiple_actio0/file1.txt' -> '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_batch_undo_multiple_actio0/file1_moved.txt'
+Attempting to revert...
+Skipped revert: File to revert from does not exist: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_batch_undo_multiple_actio0/file2.txt'
+Skipped revert: File to revert from does not exist: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_batch_undo_multiple_actio0/file1.txt'
+Cleaning up created directories (if empty)...
+------------------------------
+Undo Summary:
+  Actions successfully reverted: 0
+  Actions skipped (not found/exists/integrity): 0
+  Errors during revert: 2
+_________________________ test_remove_empty_directory __________________________
+
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_remove_empty_directory0')
+undo_manager = <rename_app.undo_manager.UndoManager object at 0x110a1aa80>
+
+    def test_remove_empty_directory(tmp_path, undo_manager):
+        empty_dir = tmp_path / "empty_folder"
+        empty_dir.mkdir()
+>       undo_manager._try_remove_dir_if_empty(empty_dir)
+E       AttributeError: 'UndoManager' object has no attribute '_try_remove_dir_if_empty'
+
+tests/test_undo_manager.py:126: AttributeError
+_____________________ test_skip_nonempty_directory_removal _____________________
+
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_skip_nonempty_directory_r0')
+undo_manager = <rename_app.undo_manager.UndoManager object at 0x110a1be30>
+
+    def test_skip_nonempty_directory_removal(tmp_path, undo_manager):
+        non_empty = tmp_path / "non_empty"
+        non_empty.mkdir()
+        (non_empty / "file.txt").write_text("data")
+>       undo_manager._try_remove_dir_if_empty(non_empty)
+E       AttributeError: 'UndoManager' object has no attribute '_try_remove_dir_if_empty'
+
+tests/test_undo_manager.py:134: AttributeError
+__________________________ test_prune_expired_batches __________________________
+
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_prune_expired_batches0')
+
+    def test_prune_expired_batches(tmp_path):
+        cfg = lambda k, d=None: {
+            'enable_undo': True,
+            'undo_db_path': str(tmp_path / "undo.db"),
+            'undo_expire_days': 0  # Immediately expire
+        }.get(k, d)
+        undo_manager = UndoManager(cfg_helper=cfg)
+    
+        src = tmp_path / "oldfile.txt"
+        dest = tmp_path / "newfile.txt"
+        src.write_text("data")
+        src.rename(dest)
+    
+        undo_manager.log_action("oldbatch", dest, src, 'file', 'renamed')
+>       undo_manager.prune_old_batches()
+
+tests/test_undo_manager.py:155: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <rename_app.undo_manager.UndoManager object at 0x110a1b890>
+
+    def prune_old_batches(self):
+        """Remove expired undo batches from the database."""
+>       expire_days = int(self.cfg_helper('undo_expire_days', 30))
+E       AttributeError: 'UndoManager' object has no attribute 'cfg_helper'
+
+rename_app/undo_manager.py:23: AttributeError
 =========================== short test summary info ============================
-FAILED tests/test_file_system_ops.py::test_perform_file_actions_dry_run_move_create_dir
-FAILED tests/test_file_system_ops.py::test_perform_file_actions_live_move_create_dir
-========================= 2 failed, 57 passed in 0.63s =========================
+FAILED tests/test_undo_manager.py::test_connect_failure - Exception: Cannot c...
+FAILED tests/test_undo_manager.py::test_update_action_status_failure - Failed...
+FAILED tests/test_undo_manager.py::test_record_and_undo_move - AssertionError...
+FAILED tests/test_undo_manager.py::test_record_and_undo_trash - AssertionErro...
+FAILED tests/test_undo_manager.py::test_batch_undo_multiple_actions - Asserti...
+FAILED tests/test_undo_manager.py::test_remove_empty_directory - AttributeErr...
+FAILED tests/test_undo_manager.py::test_skip_nonempty_directory_removal - Att...
+FAILED tests/test_undo_manager.py::test_prune_expired_batches - AttributeErro...
+========================= 8 failed, 69 passed in 0.79s =========================
