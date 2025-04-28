@@ -3,119 +3,310 @@ platform darwin -- Python 3.13.3, pytest-8.3.5, pluggy-1.5.0 -- /Library/Framewo
 cachedir: .pytest_cache
 rootdir: /Users/alexmunroe/Development/Gemini-Renamer
 plugins: mock-3.14.0, cov-6.1.1
-collecting ... collected 77 items
+collecting ... collected 116 items
 
-tests/test_cli.py::test_parse_arguments_minimal PASSED                   [  1%]
-tests/test_cli.py::test_parse_arguments_with_flags PASSED                [  2%]
-tests/test_cli.py::test_parse_arguments_undo_command PASSED              [  3%]
-tests/test_cli.py::test_parse_arguments_missing_command PASSED           [  5%]
-tests/test_cli.py::test_help_message PASSED                              [  6%]
-tests/test_file_system_ops.py::test_perform_file_actions_dry_run_rename PASSED [  7%]
-tests/test_file_system_ops.py::test_perform_file_actions_dry_run_move_create_dir PASSED [  9%]
-tests/test_file_system_ops.py::test_perform_file_actions_live_rename PASSED [ 10%]
-tests/test_file_system_ops.py::test_perform_file_actions_live_move_create_dir PASSED [ 11%]
-tests/test_file_system_ops.py::test_perform_file_actions_live_trash PASSED [ 12%]
-tests/test_file_system_ops.py::test_perform_file_actions_live_backup PASSED [ 14%]
-tests/test_file_system_ops.py::test_perform_file_actions_live_stage PASSED [ 15%]
-tests/test_file_system_ops.py::test_perform_file_actions_conflict_skip PASSED [ 16%]
-tests/test_file_system_ops.py::test_perform_file_actions_conflict_fail PASSED [ 18%]
-tests/test_file_system_ops.py::test_perform_file_actions_conflict_overwrite PASSED [ 19%]
-tests/test_file_system_ops.py::test_perform_file_actions_conflict_suffix PASSED [ 20%]
-tests/test_renamer.py::test_plan_rename_simple_series_no_folders PASSED  [ 22%]
-tests/test_renamer.py::test_plan_rename_movie_with_folders PASSED        [ 23%]
-tests/test_renamer.py::test_plan_rename_multi_episode_series_folders PASSED [ 24%]
-tests/test_renamer.py::test_plan_rename_no_change PASSED                 [ 25%]
-tests/test_renamer.py::test_plan_rename_conflict_skip PASSED             [ 27%]
-tests/test_renamer.py::test_plan_rename_conflict_fail PASSED             [ 28%]
-tests/test_renamer.py::test_plan_rename_conflict_overwrite_suffix PASSED [ 29%]
-tests/test_renamer.py::test_plan_rename_include_scene_tags PASSED        [ 31%]
-tests/test_undo_manager.py::test_connect_success PASSED                  [ 32%]
-tests/test_undo_manager.py::test_connect_failure FAILED                  [ 33%]
-tests/test_undo_manager.py::test_log_action_success PASSED               [ 35%]
-tests/test_undo_manager.py::test_update_action_status_success PASSED     [ 36%]
-tests/test_undo_manager.py::test_update_action_status_failure FAILED     [ 37%]
-tests/test_undo_manager.py::test_record_and_undo_move FAILED             [ 38%]
-tests/test_undo_manager.py::test_record_and_undo_trash FAILED            [ 40%]
-tests/test_undo_manager.py::test_batch_undo_multiple_actions FAILED      [ 41%]
-tests/test_undo_manager.py::test_undo_with_missing_file PASSED           [ 42%]
-tests/test_undo_manager.py::test_undo_does_not_crash_with_empty_log PASSED [ 44%]
-tests/test_undo_manager.py::test_remove_empty_directory FAILED           [ 45%]
-tests/test_undo_manager.py::test_skip_nonempty_directory_removal FAILED  [ 46%]
-tests/test_undo_manager.py::test_prune_expired_batches FAILED            [ 48%]
-tests/test_utils.py::test_sanitize_filename[Valid Filename.mkv-Valid_Filename.mkv] PASSED [ 49%]
-tests/test_utils.py::test_sanitize_filename[File with<>:"/\\|?*chars.mp4-File_with_chars.mp4] PASSED [ 50%]
-tests/test_utils.py::test_sanitize_filename[  Leading and trailing spaces . .txt-Leading_and_trailing_spaces_._.txt] PASSED [ 51%]
-tests/test_utils.py::test_sanitize_filename[  Ends with spaces and dots . . -Ends_with_spaces_and_dots] PASSED [ 53%]
-tests/test_utils.py::test_sanitize_filename[Multiple___Underscores___.srt-Multiple_Underscores_.srt] PASSED [ 54%]
-tests/test_utils.py::test_sanitize_filename[.HiddenFile-.HiddenFile] PASSED [ 55%]
-tests/test_utils.py::test_sanitize_filename[-_invalid_name_] PASSED      [ 57%]
-tests/test_utils.py::test_sanitize_filename[<>:"/\\|?*-_invalid_underscores_] PASSED [ 58%]
-tests/test_utils.py::test_sanitize_filename[...-_invalid_dots_] PASSED   [ 59%]
-tests/test_utils.py::test_sanitize_filename[ . . . -_invalid_name_] PASSED [ 61%]
-tests/test_utils.py::test_sanitize_filename[___-_invalid_underscores_] PASSED [ 62%]
-tests/test_utils.py::test_extract_scene_tags[My.Show.S01E01.PROPER.mkv-tags_tuple0-expected_list0-.PROPER] PASSED [ 63%]
-tests/test_utils.py::test_extract_scene_tags[Movie.Title.2023.REPACK.1080p.mkv-tags_tuple1-expected_list1-.REPACK] PASSED [ 64%]
-tests/test_utils.py::test_extract_scene_tags[Another.S02E03.REAL.PROPER.mkv-tags_tuple2-expected_list2-.PROPER.REAL] PASSED [ 66%]
-tests/test_utils.py::test_extract_scene_tags[Show.S03E04.mkv-tags_tuple3-expected_list3-] PASSED [ 67%]
-tests/test_utils.py::test_extract_scene_tags[File.With.internal.Source.mkv-tags_tuple4-expected_list4-.INTERNAL] PASSED [ 68%]
-tests/test_utils.py::test_extract_scene_tags[No Tags Here-tags_tuple5-expected_list5-] PASSED [ 70%]
-tests/test_utils.py::test_extract_scene_tags[File.DC.LIMITED.mkv-tags_tuple6-expected_list6-.LIMITED.DC] PASSED [ 71%]
-tests/test_utils.py::test_extract_scene_tags[[Grp] Show.S01E01 (UNCUT) [1080p].mkv-tags_tuple7-expected_list7-.UNCUT] PASSED [ 72%]
-tests/test_utils.py::test_extract_scene_tags[Show.S01E01.CustomTag.mkv-tags_tuple8-expected_list8-] PASSED [ 74%]
-tests/test_utils.py::test_extract_scene_tags[File.proper.mkv-tags_tuple9-expected_list9-.PROPER] PASSED [ 75%]
-tests/test_utils.py::test_extract_scene_tags[File.ends.with.REAL-tags_tuple10-expected_list10-.REAL] PASSED [ 76%]
-tests/test_utils.py::test_extract_scene_tags[LIMITED.file.starts.with.it.mkv-tags_tuple11-expected_list11-.LIMITED] PASSED [ 77%]
-tests/test_utils.py::test_extract_scene_tags[Two.Tags.LIMITED.REPACK.File.mkv-tags_tuple12-expected_list12-.REPACK.LIMITED] PASSED [ 79%]
-tests/test_utils.py::test_parse_subtitle_language[sub.eng.srt-eng-expected_flags0] PASSED [ 80%]
-tests/test_utils.py::test_parse_subtitle_language[sub.en.srt-eng-expected_flags1] PASSED [ 81%]
-tests/test_utils.py::test_parse_subtitle_language[subtitle.fre.forced.sub-fra-expected_flags2] PASSED [ 83%]
-tests/test_utils.py::test_parse_subtitle_language[mysub.spa.sdh.cc.vtt-spa-expected_flags3] PASSED [ 84%]
-tests/test_utils.py::test_parse_subtitle_language[NoLang.srt-None-expected_flags4] PASSED [ 85%]
-tests/test_utils.py::test_parse_subtitle_language[Foreign.Name.German.Forced.srt-deu-expected_flags5] PASSED [ 87%]
-tests/test_utils.py::test_parse_subtitle_language[Weird.Separator-jpn_sdh.ass-jpn-expected_flags6] PASSED [ 88%]
-tests/test_utils.py::test_parse_subtitle_language[Movie.Title.pt-BR.srt-por-expected_flags7] PASSED [ 89%]
-tests/test_utils.py::test_parse_subtitle_language[Movie.Title.pt.BR.srt-None-expected_flags8] PASSED [ 90%]
-tests/test_utils.py::test_parse_subtitle_language[Movie.Title.pob.srt-por-expected_flags9] PASSED [ 92%]
-tests/test_utils.py::test_parse_subtitle_language[Movie.Title.BR.srt-None-expected_flags10] PASSED [ 93%]
-tests/test_utils.py::test_parse_subtitle_language[My.Show.S01E01.720p.BluRay.x264-GRP.cze.forced.srt-ces-expected_flags11] PASSED [ 94%]
-tests/test_utils.py::test_parse_subtitle_language[Show.S01.E01.FR.srt-fra-expected_flags12] PASSED [ 96%]
-tests/test_utils.py::test_parse_subtitle_language[Show Name S01E01 Espa\xf1ol SDH.srt-spa-expected_flags13] PASSED [ 97%]
-tests/test_utils.py::test_scan_media_files_simple PASSED                 [ 98%]
-tests/test_utils.py::test_scan_media_files_recursive PASSED              [100%]
+tests/test_cli.py::test_parse_arguments_minimal PASSED                   [  0%]
+tests/test_cli.py::test_parse_arguments_with_flags PASSED                [  1%]
+tests/test_cli.py::test_parse_arguments_undo_command PASSED              [  2%]
+tests/test_cli.py::test_parse_arguments_missing_command PASSED           [  3%]
+tests/test_cli.py::test_help_message PASSED                              [  4%]
+tests/test_file_system_ops.py::test_perform_file_actions_dry_run_rename PASSED [  5%]
+tests/test_file_system_ops.py::test_perform_file_actions_dry_run_move_create_dir PASSED [  6%]
+tests/test_file_system_ops.py::test_perform_file_actions_live_rename PASSED [  6%]
+tests/test_file_system_ops.py::test_perform_file_actions_live_move_create_dir PASSED [  7%]
+tests/test_file_system_ops.py::test_perform_file_actions_live_trash PASSED [  8%]
+tests/test_file_system_ops.py::test_perform_file_actions_live_backup PASSED [  9%]
+tests/test_file_system_ops.py::test_perform_file_actions_live_stage PASSED [ 10%]
+tests/test_file_system_ops.py::test_perform_file_actions_conflict_skip PASSED [ 11%]
+tests/test_file_system_ops.py::test_perform_file_actions_conflict_fail PASSED [ 12%]
+tests/test_file_system_ops.py::test_perform_file_actions_conflict_overwrite PASSED [ 12%]
+tests/test_file_system_ops.py::test_perform_file_actions_conflict_suffix PASSED [ 13%]
+tests/test_renamer.py::test_plan_rename_simple_series_no_folders <- ../Gemini_Renamer/tests/test_renamer.py PASSED [ 14%]
+tests/test_renamer.py::test_plan_rename_movie_with_folders <- ../Gemini_Renamer/tests/test_renamer.py PASSED [ 15%]
+tests/test_renamer.py::test_plan_rename_multi_episode_series_folders <- ../Gemini_Renamer/tests/test_renamer.py PASSED [ 16%]
+tests/test_renamer.py::test_plan_rename_no_change <- ../Gemini_Renamer/tests/test_renamer.py PASSED [ 17%]
+tests/test_renamer.py::test_plan_rename_conflict_skip <- ../Gemini_Renamer/tests/test_renamer.py PASSED [ 18%]
+tests/test_renamer.py::test_plan_rename_conflict_fail <- ../Gemini_Renamer/tests/test_renamer.py PASSED [ 18%]
+tests/test_renamer.py::test_plan_rename_conflict_overwrite_suffix <- ../Gemini_Renamer/tests/test_renamer.py PASSED [ 19%]
+tests/test_renamer.py::test_plan_rename_include_scene_tags <- ../Gemini_Renamer/tests/test_renamer.py PASSED [ 20%]
+tests/test_undo_manager.py::test_init_unexpected_error PASSED            [ 21%]
+tests/test_undo_manager.py::test_resolve_db_path_from_config PASSED      [ 22%]
+tests/test_undo_manager.py::test_resolve_db_path_config_error PASSED     [ 23%]
+tests/test_undo_manager.py::test_resolve_db_path_default_error PASSED    [ 24%]
+tests/test_undo_manager.py::test_connect_db_path_none PASSED             [ 25%]
+tests/test_undo_manager.py::test_connect_pragma_warning FAILED           [ 25%]
+tests/test_undo_manager.py::test_init_db_schema_error_disables_manager FAILED [ 26%]
+tests/test_undo_manager.py::test_init_db_creates_table_and_index PASSED  [ 27%]
+tests/test_undo_manager.py::test_log_action_skips_stats_for_dir PASSED   [ 28%]
+tests/test_undo_manager.py::test_log_action_skips_stats_for_wrong_status PASSED [ 29%]
+tests/test_undo_manager.py::test_log_action_stat_target_not_file FAILED  [ 30%]
+tests/test_undo_manager.py::test_log_action_integrity_error FAILED       [ 31%]
+tests/test_undo_manager.py::test_log_action_stat_os_error FAILED         [ 31%]
+tests/test_undo_manager.py::test_log_action_generic_db_error FAILED      [ 32%]
+tests/test_undo_manager.py::test_log_action_generic_exception FAILED     [ 33%]
+tests/test_undo_manager.py::test_update_action_status_success PASSED     [ 34%]
+tests/test_undo_manager.py::test_update_action_status_failure PASSED     [ 35%]
+tests/test_undo_manager.py::test_update_action_status_db_error FAILED    [ 36%]
+tests/test_undo_manager.py::test_update_action_status_exception FAILED   [ 37%]
+tests/test_undo_manager.py::test_prune_skip_negative_days FAILED         [ 37%]
+tests/test_undo_manager.py::test_prune_invalid_days_config FAILED        [ 38%]
+tests/test_undo_manager.py::test_prune_db_error FAILED                   [ 39%]
+tests/test_undo_manager.py::test_prune_exception FAILED                  [ 40%]
+tests/test_undo_manager.py::test_prune_no_entries_deleted FAILED         [ 41%]
+tests/test_undo_manager.py::test_prune_expired_batches PASSED            [ 42%]
+tests/test_undo_manager.py::test_perform_undo_disabled FAILED            [ 43%]
+tests/test_undo_manager.py::test_perform_undo_db_not_found FAILED        [ 43%]
+tests/test_undo_manager.py::test_perform_undo_db_fetch_error FAILED      [ 44%]
+tests/test_undo_manager.py::test_perform_undo_preview_unknown_status FAILED [ 45%]
+tests/test_undo_manager.py::test_perform_undo_confirmation_eof FAILED    [ 46%]
+tests/test_undo_manager.py::test_perform_undo_confirmation_exception FAILED [ 47%]
+tests/test_undo_manager.py::test_perform_undo_failed_status_update FAILED [ 48%]
+tests/test_undo_manager.py::test_perform_undo_revert_os_error FAILED     [ 49%]
+tests/test_undo_manager.py::test_perform_undo_revert_exception FAILED    [ 50%]
+tests/test_undo_manager.py::test_perform_undo_dir_removal_os_error FAILED [ 50%]
+tests/test_undo_manager.py::test_perform_undo_dir_does_not_exist_on_cleanup FAILED [ 51%]
+tests/test_undo_manager.py::test_perform_undo_dir_cleanup_exception FAILED [ 52%]
+tests/test_undo_manager.py::test_connect_success PASSED                  [ 53%]
+tests/test_undo_manager.py::test_log_action_success PASSED               [ 54%]
+tests/test_undo_manager.py::test_log_action_stores_stats PASSED          [ 55%]
+tests/test_undo_manager.py::test_record_and_undo_move PASSED             [ 56%]
+tests/test_undo_manager.py::test_record_and_undo_move_into_created_dir PASSED [ 56%]
+tests/test_undo_manager.py::test_batch_undo_multiple_actions PASSED      [ 57%]
+tests/test_undo_manager.py::test_undo_with_missing_current_file PASSED   [ 58%]
+tests/test_undo_manager.py::test_undo_does_not_crash_with_empty_log FAILED [ 59%]
+tests/test_undo_manager.py::test_undo_target_already_exists FAILED       [ 60%]
+tests/test_undo_manager.py::test_undo_created_dir_empty FAILED           [ 61%]
+tests/test_undo_manager.py::test_undo_created_dir_not_empty FAILED       [ 62%]
+tests/test_undo_manager.py::test_undo_integrity_check_success PASSED     [ 62%]
+tests/test_undo_manager.py::test_undo_integrity_check_fail_size FAILED   [ 63%]
+tests/test_undo_manager.py::test_undo_integrity_check_fail_mtime FAILED  [ 64%]
+tests/test_undo_manager.py::test_undo_failed_transaction_temp_file FAILED [ 65%]
+tests/test_utils.py::test_sanitize_filename[Valid Filename.mkv-Valid_Filename.mkv] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 66%]
+tests/test_utils.py::test_sanitize_filename[File with<>:"/\\|?*chars.mp4-File_with_chars.mp4] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 67%]
+tests/test_utils.py::test_sanitize_filename[  Leading and trailing spaces . .txt-Leading_and_trailing_spaces_._.txt] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 68%]
+tests/test_utils.py::test_sanitize_filename[  Ends with spaces and dots . . -Ends_with_spaces_and_dots] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 68%]
+tests/test_utils.py::test_sanitize_filename[Multiple___Underscores___.srt-Multiple_Underscores_.srt] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 69%]
+tests/test_utils.py::test_sanitize_filename[.HiddenFile-.HiddenFile] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 70%]
+tests/test_utils.py::test_sanitize_filename[-_invalid_name_] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 71%]
+tests/test_utils.py::test_sanitize_filename[<>:"/\\|?*-_invalid_underscores_] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 72%]
+tests/test_utils.py::test_sanitize_filename[...-_invalid_dots_] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 73%]
+tests/test_utils.py::test_sanitize_filename[ . . . -_invalid_name_] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 74%]
+tests/test_utils.py::test_sanitize_filename[___-_invalid_underscores_] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 75%]
+tests/test_utils.py::test_extract_scene_tags[My.Show.S01E01.PROPER.mkv-tags_tuple0-expected_list0-.PROPER] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 75%]
+tests/test_utils.py::test_extract_scene_tags[Movie.Title.2023.REPACK.1080p.mkv-tags_tuple1-expected_list1-.REPACK] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 76%]
+tests/test_utils.py::test_extract_scene_tags[Another.S02E03.REAL.PROPER.mkv-tags_tuple2-expected_list2-.PROPER.REAL] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 77%]
+tests/test_utils.py::test_extract_scene_tags[Show.S03E04.mkv-tags_tuple3-expected_list3-] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 78%]
+tests/test_utils.py::test_extract_scene_tags[File.With.internal.Source.mkv-tags_tuple4-expected_list4-.INTERNAL] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 79%]
+tests/test_utils.py::test_extract_scene_tags[No Tags Here-tags_tuple5-expected_list5-] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 80%]
+tests/test_utils.py::test_extract_scene_tags[File.DC.LIMITED.mkv-tags_tuple6-expected_list6-.LIMITED.DC] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 81%]
+tests/test_utils.py::test_extract_scene_tags[[Grp] Show.S01E01 (UNCUT) [1080p].mkv-tags_tuple7-expected_list7-.UNCUT] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 81%]
+tests/test_utils.py::test_extract_scene_tags[Show.S01E01.CustomTag.mkv-tags_tuple8-expected_list8-] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 82%]
+tests/test_utils.py::test_extract_scene_tags[File.proper.mkv-tags_tuple9-expected_list9-.PROPER] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 83%]
+tests/test_utils.py::test_extract_scene_tags[File.ends.with.REAL-tags_tuple10-expected_list10-.REAL] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 84%]
+tests/test_utils.py::test_extract_scene_tags[LIMITED.file.starts.with.it.mkv-tags_tuple11-expected_list11-.LIMITED] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 85%]
+tests/test_utils.py::test_extract_scene_tags[Two.Tags.LIMITED.REPACK.File.mkv-tags_tuple12-expected_list12-.REPACK.LIMITED] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 86%]
+tests/test_utils.py::test_parse_subtitle_language[sub.eng.srt-eng-expected_flags0] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 87%]
+tests/test_utils.py::test_parse_subtitle_language[sub.en.srt-eng-expected_flags1] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 87%]
+tests/test_utils.py::test_parse_subtitle_language[subtitle.fre.forced.sub-fra-expected_flags2] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 88%]
+tests/test_utils.py::test_parse_subtitle_language[mysub.spa.sdh.cc.vtt-spa-expected_flags3] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 89%]
+tests/test_utils.py::test_parse_subtitle_language[NoLang.srt-None-expected_flags4] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 90%]
+tests/test_utils.py::test_parse_subtitle_language[Foreign.Name.German.Forced.srt-deu-expected_flags5] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 91%]
+tests/test_utils.py::test_parse_subtitle_language[Weird.Separator-jpn_sdh.ass-jpn-expected_flags6] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 92%]
+tests/test_utils.py::test_parse_subtitle_language[Movie.Title.pt-BR.srt-por-expected_flags7] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 93%]
+tests/test_utils.py::test_parse_subtitle_language[Movie.Title.pt.BR.srt-None-expected_flags8] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 93%]
+tests/test_utils.py::test_parse_subtitle_language[Movie.Title.pob.srt-por-expected_flags9] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 94%]
+tests/test_utils.py::test_parse_subtitle_language[Movie.Title.BR.srt-None-expected_flags10] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 95%]
+tests/test_utils.py::test_parse_subtitle_language[My.Show.S01E01.720p.BluRay.x264-GRP.cze.forced.srt-ces-expected_flags11] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 96%]
+tests/test_utils.py::test_parse_subtitle_language[Show.S01.E01.FR.srt-fra-expected_flags12] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 97%]
+tests/test_utils.py::test_parse_subtitle_language[Show Name S01E01 Espa\xf1ol SDH.srt-spa-expected_flags13] <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 98%]
+tests/test_utils.py::test_scan_media_files_simple <- ../Gemini_Renamer/tests/test_utils.py PASSED [ 99%]
+tests/test_utils.py::test_scan_media_files_recursive <- ../Gemini_Renamer/tests/test_utils.py PASSED [100%]
 
 =================================== FAILURES ===================================
-_____________________________ test_connect_failure _____________________________
+_________________________ test_connect_pragma_warning __________________________
 
-mocker = <pytest_mock.plugin.MockerFixture object at 0x110a942c0>
-tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_connect_failure0')
+self = <rename_app.undo_manager.UndoManager object at 0x107cb9eb0>
 
-    def test_connect_failure(mocker, tmp_path):
-        broken_cfg = MagicMock()
-        broken_cfg.side_effect = lambda k, d=None: {
-            'enable_undo': True,
-            'undo_db_path': str(tmp_path / "broken.db")
-        }.get(k, d)
-        mocker.patch("sqlite3.connect", side_effect=Exception("Cannot create"))
-        with pytest.raises(RenamerError):
->           UndoManager(cfg_helper=broken_cfg)
+    def _connect(self):
+        if not self.db_path:
+            raise RenamerError("Cannot connect to undo database: path not resolved.")
+        try:
+            conn = sqlite3.connect(self.db_path, timeout=10.0)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL;")
+>           conn.execute("PRAGMA busy_timeout=5000;")
 
-tests/test_undo_manager.py:32: 
+rename_app/undo_manager.py:47: 
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-rename_app/undo_manager.py:19: in __init__
-    self._init_db()
-rename_app/undo_manager.py:70: in _init_db
-    with self._connect() as conn:
-rename_app/undo_manager.py:54: in _connect
-    conn = sqlite3.connect(self.db_path, timeout=10.0) # Added timeout
 /Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1169: in __call__
     return self._mock_call(*args, **kwargs)
 /Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1173: in _mock_call
     return self._execute_mock_call(*args, **kwargs)
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
 
-self = <MagicMock name='connect' id='4575645712'>
-args = (PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_connect_failure0/broken.db'),)
-kwargs = {'timeout': 10.0}, effect = Exception('Cannot create')
+self = <MagicMock name='mock.execute' id='4427472848'>
+args = ('PRAGMA busy_timeout=5000;',), kwargs = {}
+effect = <list_iterator object at 0x107ffb160>, result = Error('PRAGMA failed')
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+                result = next(effect)
+                if _is_exception(result):
+>                   raise result
+E                   sqlite3.Error: PRAGMA failed
+
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1232: Error
+
+The above exception was the direct cause of the following exception:
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x107cb9eb0>
+mocker = <pytest_mock.plugin.MockerFixture object at 0x10805c050>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x107e5dd30>
+
+    def test_connect_pragma_warning(basic_undo_manager, mocker, caplog):
+        mock_conn = MagicMock()
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+        mock_conn.execute.side_effect = [None, sqlite3.Error("PRAGMA failed")]
+>       mocker.patch('sqlite3.connect', return_value=mock_conn); conn_result = basic_undo_manager._connect(); assert conn_result is mock_conn
+
+tests/test_undo_manager.py:111: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <rename_app.undo_manager.UndoManager object at 0x107cb9eb0>
+
+    def _connect(self):
+        if not self.db_path:
+            raise RenamerError("Cannot connect to undo database: path not resolved.")
+        try:
+            conn = sqlite3.connect(self.db_path, timeout=10.0)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA busy_timeout=5000;")
+            return conn
+        except sqlite3.Error as e:
+>           raise RenamerError(f"Cannot connect to undo database: {e}") from e
+E           rename_app.exceptions.RenamerError: Cannot connect to undo database: PRAGMA failed
+
+rename_app/undo_manager.py:50: RenamerError
+__________________ test_init_db_schema_error_disables_manager __________________
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x10805cae0>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x107e425d0>
+
+    def test_init_db_schema_error_disables_manager(mocker, caplog):
+        mock_cfg = MagicMock(); mock_cfg.side_effect = lambda k, d=None: {'enable_undo': True, 'undo_db_path': 'dummy/path/db'}.get(k,d); mock_cfg.__call__ = mock_cfg.side_effect
+        mocker.patch('rename_app.undo_manager.UndoManager._resolve_db_path', return_value=Path('dummy/path/db'))
+        mock_cursor = MagicMock(); mock_cursor.execute.side_effect = sqlite3.Error("Schema creation failed")
+        mock_conn = MagicMock(); mock_conn.__enter__.return_value = mock_conn; mock_conn.__exit__.return_value = None; mock_conn.cursor.return_value = mock_cursor
+        mocker.patch('rename_app.undo_manager.UndoManager._connect', return_value=mock_conn); manager = UndoManager(cfg_helper=mock_cfg)
+>       assert manager.is_enabled is False; assert "Failed to initialize UndoManager" in caplog.text; assert "Failed to initialize undo database schema: Schema creation failed" in caplog.text
+E       assert True is False
+E        +  where True = <rename_app.undo_manager.UndoManager object at 0x108374380>.is_enabled
+
+tests/test_undo_manager.py:121: AssertionError
+_____________________ test_log_action_stat_target_not_file _____________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x1080596d0>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_log_action_stat_target_no0')
+caplog = <_pytest.logging.LogCaptureFixture object at 0x107e65480>
+
+    def test_log_action_stat_target_not_file(basic_undo_manager, tmp_path, caplog):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+        db_path = basic_undo_manager.db_path; dir_path = tmp_path / "stat_dir_target"; dir_path.mkdir(); basic_undo_manager.log_action("batch_stat_dir", str(dir_path), str(dir_path), 'file', 'moved')
+>       assert "Path does not exist or is not a file at logging time" in caplog.text; log_entry = _query_db(db_path, "SELECT * FROM rename_log WHERE batch_id = ?", ("batch_stat_dir",))[0]; assert log_entry['original_size'] is None
+E       AssertionError: assert 'Path does not exist or is not a file at logging time' in ''
+E        +  where '' = <_pytest.logging.LogCaptureFixture object at 0x107e65480>.text
+
+tests/test_undo_manager.py:147: AssertionError
+_______________________ test_log_action_integrity_error ________________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x10805a120>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_log_action_integrity_erro0')
+caplog = <_pytest.logging.LogCaptureFixture object at 0x108071b50>
+
+    def test_log_action_integrity_error(basic_undo_manager, tmp_path, caplog):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+        db_path = basic_undo_manager.db_path; src = tmp_path / "duplicate.txt"; src.touch()
+        basic_undo_manager.log_action("batch_duplicate", str(src), "new1.txt", 'file', 'moved'); basic_undo_manager.log_action("batch_duplicate", str(src), "new2.txt", 'file', 'renamed')
+>       assert "UNIQUE constraint failed" in caplog.text; assert _get_log_count(db_path, "batch_duplicate") == 1
+E       AssertionError: assert 'UNIQUE constraint failed' in 'WARNING  rename_app.undo_manager:undo_manager.py:99 Duplicate entry in rename log: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_log_action_integrity_erro0/duplicate.txt (batch batch_duplicate)\n'
+E        +  where 'WARNING  rename_app.undo_manager:undo_manager.py:99 Duplicate entry in rename log: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_log_action_integrity_erro0/duplicate.txt (batch batch_duplicate)\n' = <_pytest.logging.LogCaptureFixture object at 0x108071b50>.text
+
+tests/test_undo_manager.py:153: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  rename_app.undo_manager:undo_manager.py:99 Duplicate entry in rename log: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_log_action_integrity_erro0/duplicate.txt (batch batch_duplicate)
+________________________ test_log_action_stat_os_error _________________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x10800b3f0>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_log_action_stat_os_error0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x10805d4a0>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x1083756a0>
+
+    def test_log_action_stat_os_error(basic_undo_manager, tmp_path, mocker, caplog):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+        db_path = basic_undo_manager.db_path; src_str = str(tmp_path / "stat_error.txt"); Path(src_str).touch()
+        mock_path_instance = MagicMock(spec=Path); mock_path_instance.is_file.return_value = True; mock_path_instance.stat.side_effect = OSError("Stat failed")
+        mock_path_instance.__str__.return_value = src_str; mock_path_instance.name = Path(src_str).name
+        mock_path_constructor = mocker.patch('rename_app.undo_manager.Path'); mock_path_constructor.side_effect = lambda p: mock_path_instance if str(p) == src_str else Path(p)
+        basic_undo_manager.log_action("batch_stat_error", src_str, "new.txt", 'file', 'moved')
+>       assert mock_path_instance.stat.called; assert "Could not stat original" in caplog.text; assert "Stat failed" in caplog.text
+E       AssertionError: assert 'Could not stat original' in 'WARNING  rename_app.undo_manager:undo_manager.py:88 Could not stat file during log_action: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_log_action_stat_os_error0/stat_error.txt\n'
+E        +  where 'WARNING  rename_app.undo_manager:undo_manager.py:88 Could not stat file during log_action: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_log_action_stat_os_error0/stat_error.txt\n' = <_pytest.logging.LogCaptureFixture object at 0x1083756a0>.text
+
+tests/test_undo_manager.py:162: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  rename_app.undo_manager:undo_manager.py:88 Could not stat file during log_action: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_log_action_stat_os_error0/stat_error.txt
+_______________________ test_log_action_generic_db_error _______________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x108158050>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_log_action_generic_db_err0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x108300050>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x108375f20>
+
+    def test_log_action_generic_db_error(basic_undo_manager, tmp_path, mocker, caplog):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+        src = tmp_path / "generic_db_error.txt"; src.touch(); mock_conn = MagicMock(); mock_conn.__enter__.return_value = mock_conn; mock_conn.__exit__.return_value = None
+        mock_conn.execute.side_effect = sqlite3.Error("Generic DB Error on Insert"); mocker.patch.object(basic_undo_manager, '_connect', return_value=mock_conn)
+>       basic_undo_manager.log_action("batch_generic_db", str(src), "new.txt", 'file', 'moved'); assert "Failed logging undo action" in caplog.text; assert "Generic DB Error on Insert" in caplog.text
+E       AssertionError: assert 'Failed logging undo action' in 'ERROR    rename_app.undo_manager:undo_manager.py:101 Database error during log_action: Generic DB Error on Insert\n'
+E        +  where 'ERROR    rename_app.undo_manager:undo_manager.py:101 Database error during log_action: Generic DB Error on Insert\n' = <_pytest.logging.LogCaptureFixture object at 0x108375f20>.text
+
+tests/test_undo_manager.py:169: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    rename_app.undo_manager:undo_manager.py:101 Database error during log_action: Generic DB Error on Insert
+______________________ test_log_action_generic_exception _______________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x10805e820>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_log_action_generic_except0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x10805de60>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x107d53e50>
+
+    def test_log_action_generic_exception(basic_undo_manager, tmp_path, mocker, caplog):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+        src = tmp_path / "generic_exception.txt"; src.touch(); mock_conn = MagicMock(); mock_conn.__enter__.return_value = mock_conn; mock_conn.__exit__.return_value = None
+        mock_conn.execute.side_effect = Exception("Something unexpected happened"); mocker.patch.object(basic_undo_manager, '_connect', return_value=mock_conn)
+>       basic_undo_manager.log_action("batch_generic_exception", str(src), "new.txt", 'file', 'moved'); assert "Unexpected error logging undo action" in caplog.text; assert "Something unexpected happened" in caplog.text
+
+tests/test_undo_manager.py:175: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+rename_app/undo_manager.py:92: in log_action
+    conn.execute("""
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1169: in __call__
+    return self._mock_call(*args, **kwargs)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1173: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='mock.execute' id='4430398864'>
+args = ('\n                    INSERT INTO rename_log (batch_id, timestamp, original_path, new_path, type, status, original_s...test-of-alexmunroe/pytest-260/test_log_action_generic_except0/generic_exception.txt', 'new.txt', 'file', 'moved', ...))
+kwargs = {}, effect = Exception('Something unexpected happened')
 
     def _execute_mock_call(self, /, *args, **kwargs):
         # separate from _increment_mock_call so that awaited functions are
@@ -125,193 +316,672 @@ kwargs = {'timeout': 10.0}, effect = Exception('Cannot create')
         if effect is not None:
             if _is_exception(effect):
 >               raise effect
-E               Exception: Cannot create
+E               Exception: Something unexpected happened
 
 /Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1228: Exception
-______________________ test_update_action_status_failure _______________________
+______________________ test_update_action_status_db_error ______________________
 
-undo_manager = <rename_app.undo_manager.UndoManager object at 0x110d50640>
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x107cd50d0>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_update_action_status_db_e0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x107d9f930>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x107d52650>
 
-    def test_update_action_status_failure(undo_manager):
->       with pytest.raises(RenamerError):
-E       Failed: DID NOT RAISE <class 'rename_app.exceptions.RenamerError'>
+    def test_update_action_status_db_error(basic_undo_manager, tmp_path, mocker, caplog):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+        src = tmp_path / "update_db_error.txt"; src.touch(); basic_undo_manager.log_action("batch_update_db_error", str(src), "new.txt", 'file', 'pending_final')
+        mock_conn = MagicMock(); mock_conn.__enter__.return_value = mock_conn; mock_conn.__exit__.return_value = None; mock_conn.execute.side_effect = sqlite3.Error("DB Error on Update")
+        mocker.patch.object(basic_undo_manager, '_connect', return_value=mock_conn); result = basic_undo_manager.update_action_status("batch_update_db_error", str(src), "moved")
+>       assert result is False; assert "Failed updating undo status" in caplog.text; assert "DB Error on Update" in caplog.text
+E       AssertionError: assert 'Failed updating undo status' in 'ERROR    rename_app.undo_manager:undo_manager.py:116 Failed to update action status: DB Error on Update\n'
+E        +  where 'ERROR    rename_app.undo_manager:undo_manager.py:116 Failed to update action status: DB Error on Update\n' = <_pytest.logging.LogCaptureFixture object at 0x107d52650>.text
 
-tests/test_undo_manager.py:53: Failed
-__________________________ test_record_and_undo_move ___________________________
+tests/test_undo_manager.py:191: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    rename_app.undo_manager:undo_manager.py:116 Failed to update action status: DB Error on Update
+_____________________ test_update_action_status_exception ______________________
 
-tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_move0')
-undo_manager = <rename_app.undo_manager.UndoManager object at 0x110a17d10>
-mocker = <pytest_mock.plugin.MockerFixture object at 0x1109c2750>
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x107cd4cb0>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_update_action_status_exce0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x108301b20>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x108059e50>
 
-    def test_record_and_undo_move(tmp_path, undo_manager, mocker):
-        src = tmp_path / "move.txt"
-        dest = tmp_path / "moved.txt"
-        src.write_text("hello")
-        src.rename(dest)
-        undo_manager.log_action("batch3", dest, src, 'file', 'renamed')
-    
-        mocker.patch("builtins.input", return_value="y")
-        undo_manager.perform_undo("batch3")
-    
->       assert src.exists()
-E       AssertionError: assert False
-E        +  where False = exists()
-E        +    where exists = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_move0/move.txt').exists
+    def test_update_action_status_exception(basic_undo_manager, tmp_path, mocker, caplog):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+        src = tmp_path / "update_exception.txt"; src.touch(); basic_undo_manager.log_action("batch_update_exception", str(src), "new.txt", 'file', 'pending_final')
+        mock_conn = MagicMock(); mock_conn.__enter__.return_value = mock_conn; mock_conn.__exit__.return_value = None; mock_conn.execute.side_effect = Exception("Update Exception")
+>       mocker.patch.object(basic_undo_manager, '_connect', return_value=mock_conn); result = basic_undo_manager.update_action_status("batch_update_exception", str(src), "moved")
 
-tests/test_undo_manager.py:70: AssertionError
------------------------------ Captured stdout call -----------------------------
-Found 1 actions to revert for batch 'batch3'.
-Proposed reversions:
-  - Restore: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_move0/move.txt' -> '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_move0/moved.txt'
-Attempting to revert...
-Skipped revert: File to revert from does not exist: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_move0/move.txt'
-Cleaning up created directories (if empty)...
-------------------------------
-Undo Summary:
-  Actions successfully reverted: 0
-  Actions skipped (not found/exists/integrity): 0
-  Errors during revert: 1
-__________________________ test_record_and_undo_trash __________________________
-
-tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_trash0')
-undo_manager = <rename_app.undo_manager.UndoManager object at 0x1109cb9b0>
-mocker = <pytest_mock.plugin.MockerFixture object at 0x110ba64e0>
-
-    def test_record_and_undo_trash(tmp_path, undo_manager, mocker):
-        src = tmp_path / "deleted.txt"
-        trash = tmp_path / "trash" / "deleted.txt"
-        trash.parent.mkdir(parents=True, exist_ok=True)
-        src.write_text("goodbye")
-        src.rename(trash)
-    
-        undo_manager.log_action("batch4", trash, src, 'file', 'moved')
-    
-        mocker.patch("builtins.input", return_value="y")
-        undo_manager.perform_undo("batch4")
-    
->       assert src.exists()
-E       AssertionError: assert False
-E        +  where False = exists()
-E        +    where exists = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_trash0/deleted.txt').exists
-
-tests/test_undo_manager.py:85: AssertionError
------------------------------ Captured stdout call -----------------------------
-Found 1 actions to revert for batch 'batch4'.
-Proposed reversions:
-  - Restore: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_trash0/deleted.txt' -> '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_trash0/trash/deleted.txt'
-Attempting to revert...
-Skipped revert: File to revert from does not exist: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_record_and_undo_trash0/deleted.txt'
-Cleaning up created directories (if empty)...
-------------------------------
-Undo Summary:
-  Actions successfully reverted: 0
-  Actions skipped (not found/exists/integrity): 0
-  Errors during revert: 1
-_______________________ test_batch_undo_multiple_actions _______________________
-
-tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_batch_undo_multiple_actio0')
-undo_manager = <rename_app.undo_manager.UndoManager object at 0x110d98e20>
-mocker = <pytest_mock.plugin.MockerFixture object at 0x110ba6820>
-
-    def test_batch_undo_multiple_actions(tmp_path, undo_manager, mocker):
-        file1 = tmp_path / "file1.txt"
-        file2 = tmp_path / "file2.txt"
-        moved1 = tmp_path / "file1_moved.txt"
-        moved2 = tmp_path / "file2_moved.txt"
-        file1.write_text("one")
-        file2.write_text("two")
-        file1.rename(moved1)
-        file2.rename(moved2)
-    
-        undo_manager.log_action("batch5", moved1, file1, 'file', 'renamed')
-        undo_manager.log_action("batch5", moved2, file2, 'file', 'renamed')
-    
-        mocker.patch("builtins.input", return_value="y")
-        undo_manager.perform_undo("batch5")
-    
->       assert file1.exists()
-E       AssertionError: assert False
-E        +  where False = exists()
-E        +    where exists = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_batch_undo_multiple_actio0/file1.txt').exists
-
-tests/test_undo_manager.py:104: AssertionError
------------------------------ Captured stdout call -----------------------------
-Found 2 actions to revert for batch 'batch5'.
-Proposed reversions:
-  - Restore: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_batch_undo_multiple_actio0/file2.txt' -> '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_batch_undo_multiple_actio0/file2_moved.txt'
-  - Restore: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_batch_undo_multiple_actio0/file1.txt' -> '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_batch_undo_multiple_actio0/file1_moved.txt'
-Attempting to revert...
-Skipped revert: File to revert from does not exist: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_batch_undo_multiple_actio0/file2.txt'
-Skipped revert: File to revert from does not exist: '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_batch_undo_multiple_actio0/file1.txt'
-Cleaning up created directories (if empty)...
-------------------------------
-Undo Summary:
-  Actions successfully reverted: 0
-  Actions skipped (not found/exists/integrity): 0
-  Errors during revert: 2
-_________________________ test_remove_empty_directory __________________________
-
-tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_remove_empty_directory0')
-undo_manager = <rename_app.undo_manager.UndoManager object at 0x110a1aa80>
-
-    def test_remove_empty_directory(tmp_path, undo_manager):
-        empty_dir = tmp_path / "empty_folder"
-        empty_dir.mkdir()
->       undo_manager._try_remove_dir_if_empty(empty_dir)
-E       AttributeError: 'UndoManager' object has no attribute '_try_remove_dir_if_empty'
-
-tests/test_undo_manager.py:126: AttributeError
-_____________________ test_skip_nonempty_directory_removal _____________________
-
-tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_skip_nonempty_directory_r0')
-undo_manager = <rename_app.undo_manager.UndoManager object at 0x110a1be30>
-
-    def test_skip_nonempty_directory_removal(tmp_path, undo_manager):
-        non_empty = tmp_path / "non_empty"
-        non_empty.mkdir()
-        (non_empty / "file.txt").write_text("data")
->       undo_manager._try_remove_dir_if_empty(non_empty)
-E       AttributeError: 'UndoManager' object has no attribute '_try_remove_dir_if_empty'
-
-tests/test_undo_manager.py:134: AttributeError
-__________________________ test_prune_expired_batches __________________________
-
-tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-167/test_prune_expired_batches0')
-
-    def test_prune_expired_batches(tmp_path):
-        cfg = lambda k, d=None: {
-            'enable_undo': True,
-            'undo_db_path': str(tmp_path / "undo.db"),
-            'undo_expire_days': 0  # Immediately expire
-        }.get(k, d)
-        undo_manager = UndoManager(cfg_helper=cfg)
-    
-        src = tmp_path / "oldfile.txt"
-        dest = tmp_path / "newfile.txt"
-        src.write_text("data")
-        src.rename(dest)
-    
-        undo_manager.log_action("oldbatch", dest, src, 'file', 'renamed')
->       undo_manager.prune_old_batches()
-
-tests/test_undo_manager.py:155: 
+tests/test_undo_manager.py:197: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+rename_app/undo_manager.py:109: in update_action_status
+    cur = conn.execute("""
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1169: in __call__
+    return self._mock_call(*args, **kwargs)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1173: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
 
-self = <rename_app.undo_manager.UndoManager object at 0x110a1b890>
+self = <MagicMock name='mock.execute' id='4427478560'>
+args = ("\n                    UPDATE rename_log\n                    SET status = ?\n                    WHERE batch_id = ? ...921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_update_action_status_exce0/update_exception.txt'))
+kwargs = {}, effect = Exception('Update Exception')
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+>               raise effect
+E               Exception: Update Exception
+
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1228: Exception
+________________________ test_prune_skip_negative_days _________________________
+
+custom_config_manager = <function custom_config_manager.<locals>._create_manager at 0x108076b60>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_prune_skip_negative_days0')
+caplog = <_pytest.logging.LogCaptureFixture object at 0x10805af30>
+
+    def test_prune_skip_negative_days(custom_config_manager, tmp_path, caplog):
+        manager = custom_config_manager({'undo_expire_days': -5});
+        if not manager.is_enabled: pytest.skip("Undo disabled"); (tmp_path / "neg.txt").touch(); manager.log_action("batch_neg", str(tmp_path / "neg.txt"), "new_neg.txt", "file", "moved")
+>       initial_count = _get_log_count(manager.db_path); manager.prune_old_batches(); assert "Undo expiration days cannot be negative" in caplog.text; assert _get_log_count(manager.db_path) == initial_count
+E       AssertionError: assert 'Undo expiration days cannot be negative' in 'WARNING  rename_app.undo_manager:undo_manager.py:126 undo_expire_days cannot be negative. Skipping prune.\n'
+E        +  where 'WARNING  rename_app.undo_manager:undo_manager.py:126 undo_expire_days cannot be negative. Skipping prune.\n' = <_pytest.logging.LogCaptureFixture object at 0x10805af30>.text
+
+tests/test_undo_manager.py:204: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  rename_app.undo_manager:undo_manager.py:126 undo_expire_days cannot be negative. Skipping prune.
+________________________ test_prune_invalid_days_config ________________________
+
+custom_config_manager = <function custom_config_manager.<locals>._create_manager at 0x107e4fa60>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_prune_invalid_days_config0')
+caplog = <_pytest.logging.LogCaptureFixture object at 0x108009e10>
+
+    def test_prune_invalid_days_config(custom_config_manager, tmp_path, caplog):
+        manager = custom_config_manager({'undo_expire_days': 'invalid_string'});
+        if not manager.is_enabled: pytest.skip("Undo disabled"); (tmp_path / "inv.txt").touch(); manager.log_action("batch_invalid", str(tmp_path / "inv.txt"), "new_inv.txt", "file", "moved")
+>       initial_count = _get_log_count(manager.db_path); manager.prune_old_batches(); assert "Invalid 'undo_expire_days' config value" in caplog.text; assert _get_log_count(manager.db_path) == initial_count
+E       assert "Invalid 'undo_expire_days' config value" in 'WARNING  rename_app.undo_manager:undo_manager.py:129 Invalid undo_expire_days configuration. Using default 30.\n'
+E        +  where 'WARNING  rename_app.undo_manager:undo_manager.py:129 Invalid undo_expire_days configuration. Using default 30.\n' = <_pytest.logging.LogCaptureFixture object at 0x108009e10>.text
+
+tests/test_undo_manager.py:209: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  rename_app.undo_manager:undo_manager.py:129 Invalid undo_expire_days configuration. Using default 30.
+_____________________________ test_prune_db_error ______________________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x108047020>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_prune_db_error0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x10805f1e0>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x107ca6c10>
+
+    def test_prune_db_error(basic_undo_manager, tmp_path, mocker, caplog):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+        src = tmp_path / "pde.txt"; src.touch(); basic_undo_manager.log_action("batch_prune_db_err", str(src), "new_pde.txt", "file", "moved")
+        mock_cursor = MagicMock(); mock_cursor.execute.side_effect = sqlite3.Error("Prune Delete Error"); mock_cursor.rowcount = 0
+        mock_conn = MagicMock(); mock_conn.__enter__.return_value = mock_conn; mock_conn.__exit__.return_value = None; mock_conn.cursor.return_value = mock_cursor
+>       mocker.patch.object(basic_undo_manager, '_connect', return_value=mock_conn); basic_undo_manager.prune_old_batches()
+
+tests/test_undo_manager.py:216: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <rename_app.undo_manager.UndoManager object at 0x108047020>
 
     def prune_old_batches(self):
-        """Remove expired undo batches from the database."""
->       expire_days = int(self.cfg_helper('undo_expire_days', 30))
-E       AttributeError: 'UndoManager' object has no attribute 'cfg_helper'
+        if not self.is_enabled:
+            return
+    
+        try:
+            expire_days = int(self.cfg('undo_expire_days', 30))
+            if expire_days < 0:
+                log.warning("undo_expire_days cannot be negative. Skipping prune.")
+                return
+        except (ValueError, TypeError):
+            log.warning("Invalid undo_expire_days configuration. Using default 30.")
+            expire_days = 30
+    
+        cutoff = datetime.now(timezone.utc) - timedelta(days=expire_days)
+        cutoff_iso = cutoff.isoformat()
+    
+        try:
+            with self._connect() as conn:
+                cur = conn.execute("DELETE FROM rename_log WHERE timestamp < ?", (cutoff_iso,))
+                conn.commit()
+                deleted_rows = cur.rowcount or 0
+>               if deleted_rows > 0:
+E               TypeError: '>' not supported between instances of 'MagicMock' and 'int'
 
-rename_app/undo_manager.py:23: AttributeError
+rename_app/undo_manager.py:140: TypeError
+_____________________________ test_prune_exception _____________________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x108041850>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_prune_exception0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x108303040>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x108303380>
+
+    def test_prune_exception(basic_undo_manager, tmp_path, mocker, caplog):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+        src = tmp_path / "pe.txt"; src.touch(); basic_undo_manager.log_action("batch_prune_exc", str(src), "new_pe.txt", "file", "moved")
+        mock_cursor = MagicMock(); mock_cursor.execute.side_effect = Exception("Prune Exception"); mock_cursor.rowcount = 0
+        mock_conn = MagicMock(); mock_conn.__enter__.return_value = mock_conn; mock_conn.__exit__.return_value = None; mock_conn.cursor.return_value = mock_cursor
+>       mocker.patch.object(basic_undo_manager, '_connect', return_value=mock_conn); basic_undo_manager.prune_old_batches()
+
+tests/test_undo_manager.py:224: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <rename_app.undo_manager.UndoManager object at 0x108041850>
+
+    def prune_old_batches(self):
+        if not self.is_enabled:
+            return
+    
+        try:
+            expire_days = int(self.cfg('undo_expire_days', 30))
+            if expire_days < 0:
+                log.warning("undo_expire_days cannot be negative. Skipping prune.")
+                return
+        except (ValueError, TypeError):
+            log.warning("Invalid undo_expire_days configuration. Using default 30.")
+            expire_days = 30
+    
+        cutoff = datetime.now(timezone.utc) - timedelta(days=expire_days)
+        cutoff_iso = cutoff.isoformat()
+    
+        try:
+            with self._connect() as conn:
+                cur = conn.execute("DELETE FROM rename_log WHERE timestamp < ?", (cutoff_iso,))
+                conn.commit()
+                deleted_rows = cur.rowcount or 0
+>               if deleted_rows > 0:
+E               TypeError: '>' not supported between instances of 'MagicMock' and 'int'
+
+rename_app/undo_manager.py:140: TypeError
+________________________ test_prune_no_entries_deleted _________________________
+
+custom_config_manager = <function custom_config_manager.<locals>._create_manager at 0x1080762a0>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_prune_no_entries_deleted0')
+caplog = <_pytest.logging.LogCaptureFixture object at 0x107e55190>
+
+    def test_prune_no_entries_deleted(custom_config_manager, tmp_path, caplog):
+        manager = custom_config_manager({'undo_expire_days': 365});
+        if not manager.is_enabled: pytest.skip("Undo disabled"); src = tmp_path / "np.txt"; src.touch(); manager.log_action("batch_no_prune", str(src), "new_np.txt", "file", "moved")
+>       caplog.set_level(logging.DEBUG); manager.prune_old_batches(); assert "No expired entries found" in caplog.text
+E       AssertionError: assert 'No expired entries found' in 'DEBUG    rename_app.undo_manager:undo_manager.py:143 No old undo records to prune.\n'
+E        +  where 'DEBUG    rename_app.undo_manager:undo_manager.py:143 No old undo records to prune.\n' = <_pytest.logging.LogCaptureFixture object at 0x107e55190>.text
+
+tests/test_undo_manager.py:230: AssertionError
+------------------------------ Captured log call -------------------------------
+DEBUG    rename_app.undo_manager:undo_manager.py:143 No old undo records to prune.
+__________________________ test_perform_undo_disabled __________________________
+
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_disabled0')
+capsys = <_pytest.capture.CaptureFixture object at 0x107e43110>
+
+    def test_perform_undo_disabled(tmp_path, capsys):
+        cfg_disabled = lambda k, d=None: {'enable_undo': False}.get(k, d); manager_disabled = UndoManager(cfg_helper=cfg_disabled)
+>       assert not manager_disabled.is_enabled; manager_disabled.perform_undo("some_batch"); captured = capsys.readouterr(); assert "Error: Undo logging was not enabled" in captured.out
+E       AssertionError: assert 'Error: Undo logging was not enabled' in 'Undo not available: database missing or disabled.\n'
+E        +  where 'Undo not available: database missing or disabled.\n' = CaptureResult(out='Undo not available: database missing or disabled.\n', err='').out
+
+tests/test_undo_manager.py:246: AssertionError
+________________________ test_perform_undo_db_not_found ________________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x108112900>
+capsys = <_pytest.capture.CaptureFixture object at 0x10875c050>
+
+    def test_perform_undo_db_not_found(basic_undo_manager, capsys):
+        db_path = basic_undo_manager.db_path
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled");
+        assert db_path is not None
+        if db_path.exists(): db_path.unlink()
+        assert not db_path.exists(); basic_undo_manager.perform_undo("some_batch")
+>       captured = capsys.readouterr(); assert f"Error: Undo database not found at {db_path}" in captured.out
+E       AssertionError: assert 'Error: Undo database not found at /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_db_not_found0/test_undo.db' in 'Undo not available: database missing or disabled.\n'
+E        +  where 'Undo not available: database missing or disabled.\n' = CaptureResult(out='Undo not available: database missing or disabled.\n', err='').out
+
+tests/test_undo_manager.py:254: AssertionError
+_______________________ test_perform_undo_db_fetch_error _______________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x1081138c0>
+mocker = <pytest_mock.plugin.MockerFixture object at 0x108303450>
+capsys = <_pytest.capture.CaptureFixture object at 0x107e656e0>
+
+    def test_perform_undo_db_fetch_error(basic_undo_manager, mocker, capsys):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+        mock_conn = MagicMock(); mock_conn.__enter__.return_value = mock_conn; mock_conn.__exit__.return_value = None; mock_conn.execute.side_effect = sqlite3.Error("Fetch Error")
+        mocker.patch.object(basic_undo_manager, '_connect', return_value=mock_conn); basic_undo_manager.perform_undo("batch_fetch_error")
+>       captured = capsys.readouterr(); assert "Error accessing undo database: Fetch Error" in captured.out
+E       assert 'Error accessing undo database: Fetch Error' in "Undo started for batch 'batch_fetch_error'...\n"
+E        +  where "Undo started for batch 'batch_fetch_error'...\n" = CaptureResult(out="Undo started for batch 'batch_fetch_error'...\n", err='').out
+
+tests/test_undo_manager.py:260: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    rename_app.undo_manager:undo_manager.py:164 Failed to fetch undo records: Fetch Error
+___________________ test_perform_undo_preview_unknown_status ___________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x108113cb0>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_preview_unkn0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x107c39570>
+capsys = <_pytest.capture.CaptureFixture object at 0x107e66060>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x107e57350>
+
+    def test_perform_undo_preview_unknown_status(basic_undo_manager, tmp_path, mocker, capsys, caplog):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled"); caplog.set_level(logging.WARNING)
+        mock_action_row = {'id': 1, 'original_path': str(tmp_path / "unknown.txt"), 'new_path': "new_unknown.txt", 'type': 'file', 'status': 'unexpected_status', 'original_size': None, 'original_mtime': None}
+        mock_cursor = MagicMock(); mock_cursor.fetchall.return_value = [mock_action_row]
+        mock_conn = MagicMock(); mock_conn.__enter__.return_value = mock_conn; mock_conn.__exit__.return_value = None; mock_conn.execute.return_value = mock_cursor
+        mocker.patch.object(basic_undo_manager, '_connect', return_value=mock_conn); mocker.patch("builtins.input", return_value="n"); basic_undo_manager.perform_undo("batch_unknown")
+>       captured = capsys.readouterr(); assert "Unknown/Skipped Status 'unexpected_status'" in captured.out; assert "Skipping preview for unknown/unhandled status 'unexpected_status'" in caplog.text
+E       assert "Unknown/Skipped Status 'unexpected_status'" in "Undo started for batch 'batch_unknown'...\nPlan: new_unknown.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_preview_unkn0/unknown.txt\nUndo cancelled.\n"
+E        +  where "Undo started for batch 'batch_unknown'...\nPlan: new_unknown.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_preview_unkn0/unknown.txt\nUndo cancelled.\n" = CaptureResult(out="Undo started for batch 'batch_unknown'...\nPlan: new_unknown.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_preview_unkn0/unknown.txt\nUndo cancelled.\n", err='').out
+
+tests/test_undo_manager.py:268: AssertionError
+______________________ test_perform_undo_confirmation_eof ______________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x108113690>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_confirmation0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x10805fc70>
+capsys = <_pytest.capture.CaptureFixture object at 0x108071d90>
+
+    def test_perform_undo_confirmation_eof(basic_undo_manager, tmp_path, mocker, capsys):
+        src = tmp_path / "confirm_eof.txt"
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+        src.touch()
+        basic_undo_manager.log_action("batch_eof", str(src), "new.txt", 'file', 'moved')
+>       mocker.patch("builtins.input", side_effect=EOFError); basic_undo_manager.perform_undo("batch_eof")
+
+tests/test_undo_manager.py:275: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+rename_app/undo_manager.py:174: in perform_undo
+    confirm = input("Proceed with undo? (y/N): ").strip().lower()
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1169: in __call__
+    return self._mock_call(*args, **kwargs)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1173: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='input' id='4427474528'>
+args = ('Proceed with undo? (y/N): ',), kwargs = {}, effect = <class 'EOFError'>
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+>               raise effect
+E               EOFError
+
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1228: EOFError
+----------------------------- Captured stdout call -----------------------------
+Undo started for batch 'batch_eof'...
+Plan: new.txt → /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_confirmation0/confirm_eof.txt
+___________________ test_perform_undo_confirmation_exception ___________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x108110670>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_confirmation1')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x1083035f0>
+capsys = <_pytest.capture.CaptureFixture object at 0x108374490>
+
+    def test_perform_undo_confirmation_exception(basic_undo_manager, tmp_path, mocker, capsys):
+        """Test cancellation if input() raises generic Exception."""
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+        # Mock the logger within the undo_manager module
+        mock_logger = mocker.patch('rename_app.undo_manager.log')
+        src = tmp_path / "confirm_exc.txt"; dest = tmp_path / "new.txt"
+        src.touch(); basic_undo_manager.log_action("batch_exc", str(src), str(dest), 'file', 'moved'); src.rename(dest)
+        mocker.patch("builtins.input", side_effect=Exception("Input kaboom"))
+    
+        # Call the function - exception is handled internally by perform_undo
+>       result = basic_undo_manager.perform_undo("batch_exc")
+
+tests/test_undo_manager.py:289: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+rename_app/undo_manager.py:174: in perform_undo
+    confirm = input("Proceed with undo? (y/N): ").strip().lower()
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1169: in __call__
+    return self._mock_call(*args, **kwargs)
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1173: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='input' id='4427475536'>
+args = ('Proceed with undo? (y/N): ',), kwargs = {}
+effect = Exception('Input kaboom')
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+>               raise effect
+E               Exception: Input kaboom
+
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1228: Exception
+----------------------------- Captured stdout call -----------------------------
+Undo started for batch 'batch_exc'...
+Plan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_confirmation1/new.txt → /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_confirmation1/confirm_exc.txt
+____________________ test_perform_undo_failed_status_update ____________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x108112900>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_failed_statu0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x10805f930>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x107c47c20>
+
+    def test_perform_undo_failed_status_update(basic_undo_manager, tmp_path, mocker, caplog):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+        src = tmp_path / "suf.txt"; dest = tmp_path / "sum.txt"; src.write_text("c"); basic_undo_manager.log_action("batch_suf", str(src), str(dest), 'file', 'moved'); src.rename(dest)
+        mocker.patch.object(basic_undo_manager, 'update_action_status', return_value=False); mocker.patch("builtins.input", return_value="y"); basic_undo_manager.perform_undo("batch_suf")
+>       assert src.exists(); assert not dest.exists(); assert "Failed to update status to reverted" in caplog.text
+E       AssertionError: assert 'Failed to update status to reverted' in ''
+E        +  where '' = <_pytest.logging.LogCaptureFixture object at 0x107c47c20>.text
+
+tests/test_undo_manager.py:305: AssertionError
+----------------------------- Captured stdout call -----------------------------
+Undo started for batch 'batch_suf'...
+Plan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_failed_statu0/sum.txt → /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_failed_statu0/suf.txt
+Undo success: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_failed_statu0/sum.txt → /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_failed_statu0/suf.txt
+______________________ test_perform_undo_revert_os_error _______________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x108113230>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x108303c70>
+capsys = <_pytest.capture.CaptureFixture object at 0x108375590>
+
+    def test_perform_undo_revert_os_error(basic_undo_manager, tmp_path, mocker, capsys):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+        src = tmp_path / "roe.txt"; dest = tmp_path / "rom.txt"; src.write_text("c"); basic_undo_manager.log_action("batch_roe", str(src), str(dest), 'file', 'moved'); src.rename(dest)
+        mocker.patch('pathlib.Path.rename', side_effect=OSError("Cannot rename back")); mocker.patch("builtins.input", return_value="y"); basic_undo_manager.perform_undo("batch_roe")
+>       captured = capsys.readouterr(); assert not src.exists(); assert dest.exists(); assert f"Error reverting '{dest.name}' to '{src.name}': Cannot rename back" in captured.out
+E       assert "Error reverting 'rom.txt' to 'roe.txt': Cannot rename back" in "Undo started for batch 'batch_roe'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0/rom.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0/roe.txt\nUndo failed for /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0/rom.txt: Cannot rename back\n"
+E        +  where "Undo started for batch 'batch_roe'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0/rom.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0/roe.txt\nUndo failed for /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0/rom.txt: Cannot rename back\n" = CaptureResult(out="Undo started for batch 'batch_roe'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0/rom.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0/roe.txt\nUndo failed for /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0/rom.txt: Cannot rename back\n", err='').out
+
+tests/test_undo_manager.py:311: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    rename_app.undo_manager:undo_manager.py:191 Undo failed for /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0/rom.txt: Cannot rename back
+______________________ test_perform_undo_revert_exception ______________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x108112660>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x10805cfc0>
+capsys = <_pytest.capture.CaptureFixture object at 0x108705050>
+
+    def test_perform_undo_revert_exception(basic_undo_manager, tmp_path, mocker, capsys):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+        src = tmp_path / "re.txt"; dest = tmp_path / "rem.txt"; src.write_text("c"); basic_undo_manager.log_action("batch_re", str(src), str(dest), 'file', 'moved'); src.rename(dest)
+        mocker.patch('pathlib.Path.rename', side_effect=Exception("Revert kaboom")); mocker.patch("builtins.input", return_value="y"); basic_undo_manager.perform_undo("batch_re")
+>       captured = capsys.readouterr(); assert not src.exists(); assert dest.exists(); assert f"Unexpected error reverting '{dest.name}': Revert kaboom" in captured.out
+E       assert "Unexpected error reverting 'rem.txt': Revert kaboom" in "Undo started for batch 'batch_re'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0/rem.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0/re.txt\nUndo failed for /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0/rem.txt: Revert kaboom\n"
+E        +  where "Undo started for batch 'batch_re'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0/rem.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0/re.txt\nUndo failed for /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0/rem.txt: Revert kaboom\n" = CaptureResult(out="Undo started for batch 'batch_re'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0/rem.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0/re.txt\nUndo failed for /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0/rem.txt: Revert kaboom\n", err='').out
+
+tests/test_undo_manager.py:318: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    rename_app.undo_manager:undo_manager.py:191 Undo failed for /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0/rem.txt: Revert kaboom
+____________________ test_perform_undo_dir_removal_os_error ____________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x1081118d0>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x108301b20>
+capsys = <_pytest.capture.CaptureFixture object at 0x108704c50>
+
+    def test_perform_undo_dir_removal_os_error(basic_undo_manager, tmp_path, mocker, capsys):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+        created_dir = tmp_path / "drre"; basic_undo_manager.log_action("batch_drre", str(created_dir), str(created_dir), 'dir', 'created_dir'); created_dir.mkdir()
+        mocker.patch('pathlib.Path.rmdir', side_effect=OSError("Cannot remove dir")); mocker.patch("builtins.input", return_value="y"); basic_undo_manager.perform_undo("batch_drre")
+>       captured = capsys.readouterr(); assert created_dir.exists(); assert f"Error removing directory '{created_dir}': Cannot remove dir" in captured.out
+E       assert "Error removing directory '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre': Cannot remove dir" in "Undo started for batch 'batch_drre'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre\nSkipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre (destination exists or missing source)\n"
+E        +  where "Undo started for batch 'batch_drre'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre\nSkipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre (destination exists or missing source)\n" = CaptureResult(out="Undo started for batch 'batch_drre'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre\nSkipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre (destination exists or missing source)\n", err='').out
+
+tests/test_undo_manager.py:325: AssertionError
+_______________ test_perform_undo_dir_does_not_exist_on_cleanup ________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x1086bdc50>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_does_not0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x10805ca10>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x10871a4c0>
+
+    def test_perform_undo_dir_does_not_exist_on_cleanup(basic_undo_manager, tmp_path, mocker, caplog):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+        created_dir = tmp_path / "dgone"; basic_undo_manager.log_action("batch_dgone", str(created_dir), str(created_dir), 'dir', 'created_dir')
+        mocker.patch("builtins.input", return_value="y"); caplog.set_level(logging.DEBUG); basic_undo_manager.perform_undo("batch_dgone")
+>       assert not created_dir.exists(); assert f"Skipped removal: Directory '{created_dir}' does not exist." in caplog.text
+E       assert "Skipped removal: Directory '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_does_not0/dgone' does not exist." in ''
+E        +  where '' = <_pytest.logging.LogCaptureFixture object at 0x10871a4c0>.text
+
+tests/test_undo_manager.py:332: AssertionError
+----------------------------- Captured stdout call -----------------------------
+Undo started for batch 'batch_dgone'...
+Plan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_does_not0/dgone → /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_does_not0/dgone
+Skipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_does_not0/dgone (destination exists or missing source)
+___________________ test_perform_undo_dir_cleanup_exception ____________________
+
+self = <MagicMock name='log.exception' id='4430406256'>
+args = ("Unexpected error processing directory '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_cleanup_0/dir_cleanup_exc'",)
+kwargs = {}, msg = "Expected 'exception' to be called once. Called 0 times."
+
+    def assert_called_once_with(self, /, *args, **kwargs):
+        """assert that the mock was called exactly once and that that call was
+        with the specified arguments."""
+        if not self.call_count == 1:
+            msg = ("Expected '%s' to be called once. Called %s times.%s"
+                   % (self._mock_name or 'mock',
+                      self.call_count,
+                      self._calls_repr()))
+>           raise AssertionError(msg)
+E           AssertionError: Expected 'exception' to be called once. Called 0 times.
+
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:990: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x1086be200>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_cleanup_0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x108302dd0>
+capsys = <_pytest.capture.CaptureFixture object at 0x10872c6e0>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x108709310>
+
+    def test_perform_undo_dir_cleanup_exception(basic_undo_manager, tmp_path, mocker, capsys, caplog):
+        """Test error handling for generic Exception during dir cleanup."""
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+        # --- FIX: Use logger patch instead of caplog ---
+        mock_logger = mocker.patch('rename_app.undo_manager.log')
+        created_dir = tmp_path / "dir_cleanup_exc"
+        basic_undo_manager.log_action("batch_dir_cleanup_exc", str(created_dir), str(created_dir), 'dir', 'created_dir'); created_dir.mkdir()
+    
+        original_update = basic_undo_manager.update_action_status
+        def mock_update_specific(*args, **kwargs):
+            if args[1] == str(created_dir) and args[2] == 'reverted': raise Exception("Cleanup update kaboom")
+            return original_update(*args, **kwargs)
+    
+        mocker.patch.object(basic_undo_manager, 'update_action_status', side_effect=mock_update_specific)
+        mock_rmdir = mocker.patch('pathlib.Path.rmdir')
+        mocker.patch("builtins.input", return_value="y")
+    
+        # Call should complete as exception is caught internally
+        basic_undo_manager.perform_undo("batch_dir_cleanup_exc")
+    
+        # Assertions after the call
+        # Check that the correct exception logging method was called
+>       mock_logger.exception.assert_called_once_with(f"Unexpected error processing directory '{created_dir}'")
+E       AssertionError: Expected 'exception' to be called once. Called 0 times.
+
+tests/test_undo_manager.py:358: AssertionError
+----------------------------- Captured stdout call -----------------------------
+Undo started for batch 'batch_dir_cleanup_exc'...
+Plan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_cleanup_0/dir_cleanup_exc → /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_cleanup_0/dir_cleanup_exc
+Skipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_cleanup_0/dir_cleanup_exc (destination exists or missing source)
+___________________ test_undo_does_not_crash_with_empty_log ____________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x1087004b0>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_does_not_crash_with_0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x108301300>
+capsys = <_pytest.capture.CaptureFixture object at 0x10800b070>
+
+    def test_undo_does_not_crash_with_empty_log(basic_undo_manager, tmp_path, mocker, capsys):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+>       mocker.patch("builtins.input",return_value="y"); basic_undo_manager.perform_undo("empty_batch_id"); captured=capsys.readouterr(); assert f"No revertible actions found for batch 'empty_batch_id'." in captured.out
+E       assert "No revertible actions found for batch 'empty_batch_id'." in "Undo started for batch 'empty_batch_id'...\nNo undoable actions found.\n"
+E        +  where "Undo started for batch 'empty_batch_id'...\nNo undoable actions found.\n" = CaptureResult(out="Undo started for batch 'empty_batch_id'...\nNo undoable actions found.\n", err='').out
+
+tests/test_undo_manager.py:381: AssertionError
+_______________________ test_undo_target_already_exists ________________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x1087024a0>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x107c39570>
+capsys = <_pytest.capture.CaptureFixture object at 0x10800ab30>
+
+    def test_undo_target_already_exists(basic_undo_manager, tmp_path, mocker, capsys):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+>       src=tmp_path/"oe.txt"; dest=tmp_path/"me.txt"; src.write_text("original content"); basic_undo_manager.log_action("be",str(src),str(dest),'file','moved'); src.rename(dest); src.write_text("original content again"); assert src.exists() and dest.exists(); mocker.patch("builtins.input",return_value="y"); basic_undo_manager.perform_undo("be"); captured=capsys.readouterr(); assert f"Skipped revert: Cannot revert '{dest.name}'. Original path '{src}' already exists." in captured.out; assert src.exists() and src.read_text()=="original content again"; assert dest.exists() and dest.read_text()=="original content"; log_entry = _query_db(basic_undo_manager.db_path, "SELECT status FROM rename_log WHERE batch_id = ?", ("be",))[0]; assert log_entry['status']=='moved'
+E       assert "Skipped revert: Cannot revert 'me.txt'. Original path '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/oe.txt' already exists." in "Undo started for batch 'be'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/me.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/oe.txt\nSkipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/me.txt (destination exists or missing source)\n"
+E        +  where "Undo started for batch 'be'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/me.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/oe.txt\nSkipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/me.txt (destination exists or missing source)\n" = CaptureResult(out="Undo started for batch 'be'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/me.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/oe.txt\nSkipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/me.txt (destination exists or missing source)\n", err='').out
+
+tests/test_undo_manager.py:384: AssertionError
+_________________________ test_undo_created_dir_empty __________________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x108702ba0>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_empty0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x108300c80>
+
+    def test_undo_created_dir_empty(basic_undo_manager, tmp_path, mocker):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+>       db_path=basic_undo_manager.db_path; created_dir=tmp_path/"nce"; basic_undo_manager.log_action("bcd",str(created_dir),str(created_dir),'dir','created_dir'); created_dir.mkdir(); mocker.patch("builtins.input",return_value="y"); basic_undo_manager.perform_undo("bcd"); assert not created_dir.exists(); log_entry = _query_db(db_path, "SELECT status FROM rename_log WHERE batch_id = ?", ("bcd",))[0]; assert log_entry['status']=='reverted'
+E       AssertionError: assert not True
+E        +  where True = exists()
+E        +    where exists = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_empty0/nce').exists
+
+tests/test_undo_manager.py:387: AssertionError
+----------------------------- Captured stdout call -----------------------------
+Undo started for batch 'bcd'...
+Plan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_empty0/nce → /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_empty0/nce
+Skipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_empty0/nce (destination exists or missing source)
+_______________________ test_undo_created_dir_not_empty ________________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x108701f60>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x10805f5f0>
+capsys = <_pytest.capture.CaptureFixture object at 0x10805c2c0>
+
+    def test_undo_created_dir_not_empty(basic_undo_manager, tmp_path, mocker, capsys):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+>       db_path=basic_undo_manager.db_path; created_dir=tmp_path/"ncne"; basic_undo_manager.log_action("bne",str(created_dir),str(created_dir),'dir','created_dir'); created_dir.mkdir(); (created_dir/"f.txt").touch(); mocker.patch("builtins.input",return_value="y"); basic_undo_manager.perform_undo("bne"); captured=capsys.readouterr(); assert created_dir.exists(); assert f"Skipped removal: Directory '{created_dir}' is not empty." in captured.out; log_entry=_query_db(db_path, "SELECT status FROM rename_log WHERE batch_id = ?", ("bne",))[0]; assert log_entry['status']=='created_dir'
+E       assert "Skipped removal: Directory '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne' is not empty." in "Undo started for batch 'bne'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne\nSkipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne (destination exists or missing source)\n"
+E        +  where "Undo started for batch 'bne'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne\nSkipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne (destination exists or missing source)\n" = CaptureResult(out="Undo started for batch 'bne'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne\nSkipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne (destination exists or missing source)\n", err='').out
+
+tests/test_undo_manager.py:390: AssertionError
+_____________________ test_undo_integrity_check_fail_size ______________________
+
+manager_integrity_check = <rename_app.undo_manager.UndoManager object at 0x108701d30>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_integrity_check_fail0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x108301a50>
+capsys = <_pytest.capture.CaptureFixture object at 0x107e56c90>
+
+    def test_undo_integrity_check_fail_size(manager_integrity_check, tmp_path, mocker, capsys):
+        if not manager_integrity_check.is_enabled: pytest.skip("Undo disabled")
+>       src=tmp_path/"is.txt";dest=tmp_path/"ims.txt"; src.write_text("s"); manager_integrity_check.log_action("bis",str(src),str(dest),'file','moved'); src.rename(dest); dest.write_text("loooooonger"); mocker.patch("builtins.input",return_value="y"); manager_integrity_check.perform_undo("bis"); captured=capsys.readouterr(); assert not src.exists() and dest.exists(); assert "Integrity FAIL (Size)" in captured.out; assert "Skipping revert" in captured.out; log_entry=_query_db(manager_integrity_check.db_path,"SELECT status FROM rename_log WHERE batch_id = ?",("bis",))[0]; assert log_entry['status']=='moved'
+E       AssertionError: assert (not True)
+E        +  where True = exists()
+E        +    where exists = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_integrity_check_fail0/is.txt').exists
+
+tests/test_undo_manager.py:396: AssertionError
+_____________________ test_undo_integrity_check_fail_mtime _____________________
+
+manager_integrity_check = <rename_app.undo_manager.UndoManager object at 0x108703930>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_integrity_check_fail1')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x10805f1e0>
+capsys = <_pytest.capture.CaptureFixture object at 0x107e54590>
+
+    def test_undo_integrity_check_fail_mtime(manager_integrity_check, tmp_path, mocker, capsys):
+        if not manager_integrity_check.is_enabled: pytest.skip("Undo disabled")
+>       src=tmp_path/"imt.txt";dest=tmp_path/"immt.txt";content="m"; src.write_text(content); original_mtime=src.stat().st_mtime; manager_integrity_check.log_action("bim",str(src),str(dest),'file','moved'); src.rename(dest); time.sleep(0.1); current_time=time.time(); os.utime(dest, (current_time, current_time+5)); new_mtime=dest.stat().st_mtime; assert abs(new_mtime-original_mtime)>1; mocker.patch("builtins.input",return_value="y"); manager_integrity_check.perform_undo("bim"); captured=capsys.readouterr(); assert not src.exists() and dest.exists(); assert "Integrity FAIL (MTime)" in captured.out; assert "Skipping revert" in captured.out; log_entry=_query_db(manager_integrity_check.db_path,"SELECT status FROM rename_log WHERE batch_id = ?",("bim",))[0]; assert log_entry['status']=='moved'
+E       AssertionError: assert (not True)
+E        +  where True = exists()
+E        +    where exists = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_integrity_check_fail1/imt.txt').exists
+
+tests/test_undo_manager.py:399: AssertionError
+____________________ test_undo_failed_transaction_temp_file ____________________
+
+basic_undo_manager = <rename_app.undo_manager.UndoManager object at 0x108703d20>
+tmp_path = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_failed_transaction_t0')
+mocker = <pytest_mock.plugin.MockerFixture object at 0x108301710>
+
+    def test_undo_failed_transaction_temp_file(basic_undo_manager, tmp_path, mocker):
+        if not basic_undo_manager.is_enabled: pytest.skip("Undo disabled")
+>       src=tmp_path/"of.txt";final_dest=tmp_path/"ff.txt";temp_path=final_dest.parent/f"{final_dest.stem}{TEMP_SUFFIX_PREFIX}abc{final_dest.suffix}"; src.write_text("failed"); basic_undo_manager.log_action("bft",str(src),str(final_dest),'file','pending_final'); src.rename(temp_path); mocker.patch("builtins.input",return_value="y"); basic_undo_manager.perform_undo("bft"); assert src.exists() and src.read_text()=="failed" and not temp_path.exists() and not final_dest.exists(); log_entry=_query_db(basic_undo_manager.db_path,"SELECT status FROM rename_log WHERE batch_id = ?",("bft",))[0]; assert log_entry['status']=='reverted'
+E       AssertionError: assert (False)
+E        +  where False = exists()
+E        +    where exists = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_failed_transaction_t0/of.txt').exists
+
+tests/test_undo_manager.py:402: AssertionError
+----------------------------- Captured stdout call -----------------------------
+Undo started for batch 'bft'...
+Plan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_failed_transaction_t0/ff.txt → /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_failed_transaction_t0/of.txt
+Skipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_failed_transaction_t0/ff.txt (destination exists or missing source)
 =========================== short test summary info ============================
-FAILED tests/test_undo_manager.py::test_connect_failure - Exception: Cannot c...
-FAILED tests/test_undo_manager.py::test_update_action_status_failure - Failed...
-FAILED tests/test_undo_manager.py::test_record_and_undo_move - AssertionError...
-FAILED tests/test_undo_manager.py::test_record_and_undo_trash - AssertionErro...
-FAILED tests/test_undo_manager.py::test_batch_undo_multiple_actions - Asserti...
-FAILED tests/test_undo_manager.py::test_remove_empty_directory - AttributeErr...
-FAILED tests/test_undo_manager.py::test_skip_nonempty_directory_removal - Att...
-FAILED tests/test_undo_manager.py::test_prune_expired_batches - AttributeErro...
-========================= 8 failed, 69 passed in 0.79s =========================
+FAILED tests/test_undo_manager.py::test_connect_pragma_warning - rename_app.exceptions.RenamerError: Cannot connect to undo database: PRAGMA failed
+FAILED tests/test_undo_manager.py::test_init_db_schema_error_disables_manager - assert True is False
+ +  where True = <rename_app.undo_manager.UndoManager object at 0x108374380>.is_enabled
+FAILED tests/test_undo_manager.py::test_log_action_stat_target_not_file - AssertionError: assert 'Path does not exist or is not a file at logging time' in ''
+ +  where '' = <_pytest.logging.LogCaptureFixture object at 0x107e65480>.text
+FAILED tests/test_undo_manager.py::test_log_action_integrity_error - AssertionError: assert 'UNIQUE constraint failed' in 'WARNING  rename_app.undo_manager:undo_manager.py:99 Duplicate entry in rename log: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_log_action_integrity_erro0/duplicate.txt (batch batch_duplicate)\n'
+ +  where 'WARNING  rename_app.undo_manager:undo_manager.py:99 Duplicate entry in rename log: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_log_action_integrity_erro0/duplicate.txt (batch batch_duplicate)\n' = <_pytest.logging.LogCaptureFixture object at 0x108071b50>.text
+FAILED tests/test_undo_manager.py::test_log_action_stat_os_error - AssertionError: assert 'Could not stat original' in 'WARNING  rename_app.undo_manager:undo_manager.py:88 Could not stat file during log_action: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_log_action_stat_os_error0/stat_error.txt\n'
+ +  where 'WARNING  rename_app.undo_manager:undo_manager.py:88 Could not stat file during log_action: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_log_action_stat_os_error0/stat_error.txt\n' = <_pytest.logging.LogCaptureFixture object at 0x1083756a0>.text
+FAILED tests/test_undo_manager.py::test_log_action_generic_db_error - AssertionError: assert 'Failed logging undo action' in 'ERROR    rename_app.undo_manager:undo_manager.py:101 Database error during log_action: Generic DB Error on Insert\n'
+ +  where 'ERROR    rename_app.undo_manager:undo_manager.py:101 Database error during log_action: Generic DB Error on Insert\n' = <_pytest.logging.LogCaptureFixture object at 0x108375f20>.text
+FAILED tests/test_undo_manager.py::test_log_action_generic_exception - Exception: Something unexpected happened
+FAILED tests/test_undo_manager.py::test_update_action_status_db_error - AssertionError: assert 'Failed updating undo status' in 'ERROR    rename_app.undo_manager:undo_manager.py:116 Failed to update action status: DB Error on Update\n'
+ +  where 'ERROR    rename_app.undo_manager:undo_manager.py:116 Failed to update action status: DB Error on Update\n' = <_pytest.logging.LogCaptureFixture object at 0x107d52650>.text
+FAILED tests/test_undo_manager.py::test_update_action_status_exception - Exception: Update Exception
+FAILED tests/test_undo_manager.py::test_prune_skip_negative_days - AssertionError: assert 'Undo expiration days cannot be negative' in 'WARNING  rename_app.undo_manager:undo_manager.py:126 undo_expire_days cannot be negative. Skipping prune.\n'
+ +  where 'WARNING  rename_app.undo_manager:undo_manager.py:126 undo_expire_days cannot be negative. Skipping prune.\n' = <_pytest.logging.LogCaptureFixture object at 0x10805af30>.text
+FAILED tests/test_undo_manager.py::test_prune_invalid_days_config - assert "Invalid 'undo_expire_days' config value" in 'WARNING  rename_app.undo_manager:undo_manager.py:129 Invalid undo_expire_days configuration. Using default 30.\n'
+ +  where 'WARNING  rename_app.undo_manager:undo_manager.py:129 Invalid undo_expire_days configuration. Using default 30.\n' = <_pytest.logging.LogCaptureFixture object at 0x108009e10>.text
+FAILED tests/test_undo_manager.py::test_prune_db_error - TypeError: '>' not supported between instances of 'MagicMock' and 'int'
+FAILED tests/test_undo_manager.py::test_prune_exception - TypeError: '>' not supported between instances of 'MagicMock' and 'int'
+FAILED tests/test_undo_manager.py::test_prune_no_entries_deleted - AssertionError: assert 'No expired entries found' in 'DEBUG    rename_app.undo_manager:undo_manager.py:143 No old undo records to prune.\n'
+ +  where 'DEBUG    rename_app.undo_manager:undo_manager.py:143 No old undo records to prune.\n' = <_pytest.logging.LogCaptureFixture object at 0x107e55190>.text
+FAILED tests/test_undo_manager.py::test_perform_undo_disabled - AssertionError: assert 'Error: Undo logging was not enabled' in 'Undo not available: database missing or disabled.\n'
+ +  where 'Undo not available: database missing or disabled.\n' = CaptureResult(out='Undo not available: database missing or disabled.\n', err='').out
+FAILED tests/test_undo_manager.py::test_perform_undo_db_not_found - AssertionError: assert 'Error: Undo database not found at /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_db_not_found0/test_undo.db' in 'Undo not available: database missing or disabled.\n'
+ +  where 'Undo not available: database missing or disabled.\n' = CaptureResult(out='Undo not available: database missing or disabled.\n', err='').out
+FAILED tests/test_undo_manager.py::test_perform_undo_db_fetch_error - assert 'Error accessing undo database: Fetch Error' in "Undo started for batch 'batch_fetch_error'...\n"
+ +  where "Undo started for batch 'batch_fetch_error'...\n" = CaptureResult(out="Undo started for batch 'batch_fetch_error'...\n", err='').out
+FAILED tests/test_undo_manager.py::test_perform_undo_preview_unknown_status - assert "Unknown/Skipped Status 'unexpected_status'" in "Undo started for batch 'batch_unknown'...\nPlan: new_unknown.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_preview_unkn0/unknown.txt\nUndo cancelled.\n"
+ +  where "Undo started for batch 'batch_unknown'...\nPlan: new_unknown.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_preview_unkn0/unknown.txt\nUndo cancelled.\n" = CaptureResult(out="Undo started for batch 'batch_unknown'...\nPlan: new_unknown.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_preview_unkn0/unknown.txt\nUndo cancelled.\n", err='').out
+FAILED tests/test_undo_manager.py::test_perform_undo_confirmation_eof - EOFError
+FAILED tests/test_undo_manager.py::test_perform_undo_confirmation_exception - Exception: Input kaboom
+FAILED tests/test_undo_manager.py::test_perform_undo_failed_status_update - AssertionError: assert 'Failed to update status to reverted' in ''
+ +  where '' = <_pytest.logging.LogCaptureFixture object at 0x107c47c20>.text
+FAILED tests/test_undo_manager.py::test_perform_undo_revert_os_error - assert "Error reverting 'rom.txt' to 'roe.txt': Cannot rename back" in "Undo started for batch 'batch_roe'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0/rom.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0/roe.txt\nUndo failed for /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0/rom.txt: Cannot rename back\n"
+ +  where "Undo started for batch 'batch_roe'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0/rom.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0/roe.txt\nUndo failed for /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0/rom.txt: Cannot rename back\n" = CaptureResult(out="Undo started for batch 'batch_roe'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0/rom.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0/roe.txt\nUndo failed for /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_os_er0/rom.txt: Cannot rename back\n", err='').out
+FAILED tests/test_undo_manager.py::test_perform_undo_revert_exception - assert "Unexpected error reverting 'rem.txt': Revert kaboom" in "Undo started for batch 'batch_re'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0/rem.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0/re.txt\nUndo failed for /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0/rem.txt: Revert kaboom\n"
+ +  where "Undo started for batch 'batch_re'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0/rem.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0/re.txt\nUndo failed for /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0/rem.txt: Revert kaboom\n" = CaptureResult(out="Undo started for batch 'batch_re'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0/rem.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0/re.txt\nUndo failed for /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_revert_excep0/rem.txt: Revert kaboom\n", err='').out
+FAILED tests/test_undo_manager.py::test_perform_undo_dir_removal_os_error - assert "Error removing directory '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre': Cannot remove dir" in "Undo started for batch 'batch_drre'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre\nSkipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre (destination exists or missing source)\n"
+ +  where "Undo started for batch 'batch_drre'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre\nSkipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre (destination exists or missing source)\n" = CaptureResult(out="Undo started for batch 'batch_drre'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre\nSkipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_removal_0/drre (destination exists or missing source)\n", err='').out
+FAILED tests/test_undo_manager.py::test_perform_undo_dir_does_not_exist_on_cleanup - assert "Skipped removal: Directory '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_perform_undo_dir_does_not0/dgone' does not exist." in ''
+ +  where '' = <_pytest.logging.LogCaptureFixture object at 0x10871a4c0>.text
+FAILED tests/test_undo_manager.py::test_perform_undo_dir_cleanup_exception - AssertionError: Expected 'exception' to be called once. Called 0 times.
+FAILED tests/test_undo_manager.py::test_undo_does_not_crash_with_empty_log - assert "No revertible actions found for batch 'empty_batch_id'." in "Undo started for batch 'empty_batch_id'...\nNo undoable actions found.\n"
+ +  where "Undo started for batch 'empty_batch_id'...\nNo undoable actions found.\n" = CaptureResult(out="Undo started for batch 'empty_batch_id'...\nNo undoable actions found.\n", err='').out
+FAILED tests/test_undo_manager.py::test_undo_target_already_exists - assert "Skipped revert: Cannot revert 'me.txt'. Original path '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/oe.txt' already exists." in "Undo started for batch 'be'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/me.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/oe.txt\nSkipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/me.txt (destination exists or missing source)\n"
+ +  where "Undo started for batch 'be'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/me.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/oe.txt\nSkipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/me.txt (destination exists or missing source)\n" = CaptureResult(out="Undo started for batch 'be'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/me.txt \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/oe.txt\nSkipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_target_already_exist0/me.txt (destination exists or missing source)\n", err='').out
+FAILED tests/test_undo_manager.py::test_undo_created_dir_empty - AssertionError: assert not True
+ +  where True = exists()
+ +    where exists = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_empty0/nce').exists
+FAILED tests/test_undo_manager.py::test_undo_created_dir_not_empty - assert "Skipped removal: Directory '/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne' is not empty." in "Undo started for batch 'bne'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne\nSkipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne (destination exists or missing source)\n"
+ +  where "Undo started for batch 'bne'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne\nSkipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne (destination exists or missing source)\n" = CaptureResult(out="Undo started for batch 'bne'...\nPlan: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne \u2192 /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne\nSkipping undo: /private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_created_dir_not_empt0/ncne (destination exists or missing source)\n", err='').out
+FAILED tests/test_undo_manager.py::test_undo_integrity_check_fail_size - AssertionError: assert (not True)
+ +  where True = exists()
+ +    where exists = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_integrity_check_fail0/is.txt').exists
+FAILED tests/test_undo_manager.py::test_undo_integrity_check_fail_mtime - AssertionError: assert (not True)
+ +  where True = exists()
+ +    where exists = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_integrity_check_fail1/imt.txt').exists
+FAILED tests/test_undo_manager.py::test_undo_failed_transaction_temp_file - AssertionError: assert (False)
+ +  where False = exists()
+ +    where exists = PosixPath('/private/var/folders/97/y921hrhn0c5ghrgc16rylvpr0000gn/T/pytest-of-alexmunroe/pytest-260/test_undo_failed_transaction_t0/of.txt').exists
+======================== 33 failed, 83 passed in 2.33s =========================
