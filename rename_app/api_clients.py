@@ -1,81 +1,95 @@
-import logging, sys
-# Import specific API libraries if needed, or just handle config here
+# rename_app/api_clients.py
+
+import logging
+import sys
 from tmdbv3api import TMDb
-from tvdb_api import Tvdb
+
+# --- TVDB v4 Import ---
+# Import the correct library needed by metadata_fetcher.py
+try:
+    from tvdb_v4_official import TVDB
+    TVDB_V4_AVAILABLE = True
+except ImportError:
+    TVDB_V4_AVAILABLE = False
+    # Define TVDB as Exception if not available to avoid NameError later,
+    # although the check below should prevent usage.
+    TVDB = Exception
 
 log = logging.getLogger(__name__)
 
-# Global client instances (consider making them properties of a class)
+# Global client instances
 _tmdb_client = None
 _tvdb_client = None
 _clients_initialized = False
 
 def initialize_api_clients(cfg_helper):
-    """Initializes API clients based on config and keys."""
+    """Initializes API clients based on config and keys. Uses tvdb_v4_official."""
     global _tmdb_client, _tvdb_client, _clients_initialized
     if _clients_initialized:
         log.debug("API clients already initialized.")
         return True # Don't re-initialize
-    
+
     tmdb_key = cfg_helper.get_api_key('tmdb')
     tvdb_key = cfg_helper.get_api_key('tvdb')
-    print(f"DEBUG_CHECK: TVDB Key read by cfg_helper: [{tvdb_key}]", file=sys.stderr)
-
-    # --- MOVE LANGUAGE DEFINITION UP ---
+    # Language is primarily used for TMDB client init,
+    # tvdb-v4-official usually handles lang per request.
     language = cfg_helper('tmdb_language', 'en')
-    # --- END MOVE ---
-
-    tmdb_key = cfg_helper.get_api_key('tmdb')
-    tvdb_key = cfg_helper.get_api_key('tvdb')
-    language = cfg_helper('tmdb_language', 'en') # Use same language for both?
 
     keys_loaded = False
 
+    # --- TMDB Initialization ---
     if tmdb_key:
         try:
-            from tmdbv3api import TMDb # Import here to avoid import error if missing
             _tmdb_client = TMDb()
             _tmdb_client.api_key = tmdb_key
-
-            _tmdb_client.language = language
-            # TODO: Configure requests session for caching? tmdbv3api might not support easily.
+            _tmdb_client.language = language # Set language for TMDB
             log.info(f"TMDB API Client initialized (Lang: {language}).")
             keys_loaded = True
-        except ImportError: log.warning("TMDB requires 'tmdbv3api'.")
-        except Exception as e: log.error(f"Failed to init TMDB Client: {e}")
-    else: log.debug("TMDB API Key not found.")
+        except ImportError:
+             # This shouldn't happen if tmdbv3api is a core dependency, but good practice
+            log.warning("TMDB requires 'tmdbv3api'.")
+        except Exception as e:
+            log.error(f"Failed to init TMDB Client: {e}")
+    else:
+        log.debug("TMDB API Key not found.")
 
-    # --- Temporary Hardcoding Test ---
-    # if True: # Force attempt
-    #     try:
-    #         from tvdb_api import Tvdb
-    #         # Now 'language' is defined and can be used
-    #         _tvdb_client = Tvdb(apikey="681d03a8-d9ee-41d7-b8ee-36b583bbee89", language=language, banners=False)
-    #         log.info("TVDB Init Successful (Hardcoded Key Test)")
-    #         keys_loaded = True # Count this as loaded for the test
-    #     except Exception as e:
-    #         log.error(f"TVDB Init Failed (Hardcoded): {e}", exc_info=True)
-    # --- End Temporary Hardcoding Test ---
 
+    # --- TVDB v4 Initialization ---
     if tvdb_key:
-        try:
-            from tvdb_api import Tvdb # Import here
-            # TODO: Check tvdb_api init requirements (v4?)
-            _tvdb_client = Tvdb(apikey=tvdb_key, language=language, banners=False)
-            log.info(f"TVDB API Client initialized (Lang: {language}).")
-            keys_loaded = True
-        except ImportError: log.warning("TVDB requires 'tvdb_api'.")
-        except Exception as e: log.error(f"Failed to init TVDB Client: {e}")
-    else: log.debug("TVDB API Key not found.")
+        if TVDB_V4_AVAILABLE: # Check if the library was imported successfully
+            try:
+                # Use tvdb_v4_official's TVDB class.
+                # api_key is the typical parameter name.
+                # Language/banners are usually not constructor args for v4.
+                _tvdb_client = TVDB(apikey=tvdb_key)
+                # Updated log message as language isn't set here.
+                log.info("TVDB API Client (v4) initialized.")
+                keys_loaded = True
+            except Exception as e:
+                # More specific error log
+                log.error(f"Failed to init TVDB Client (v4): {e}", exc_info=True)
+        else:
+            # Updated warning message for correct library name.
+            log.warning("TVDB API functionality requires 'tvdb-v4-official' library.")
+    else:
+        log.debug("TVDB API Key not found.")
 
     _clients_initialized = True
-    if not keys_loaded: log.warning("No API keys loaded or clients initialized.")
+    if not keys_loaded:
+        log.warning("No API keys loaded or clients initialized successfully.")
     return keys_loaded
 
 def get_tmdb_client():
-    if not _clients_initialized: log.warning("API clients not initialized yet."); return None
+    """Returns the initialized TMDB client instance, or None."""
+    if not _clients_initialized:
+        log.warning("Attempted to get TMDB client before initialization.")
+        return None
     return _tmdb_client
 
 def get_tvdb_client():
-    if not _clients_initialized: log.warning("API clients not initialized yet."); return None
+    """Returns the initialized TVDB v4 client instance, or None."""
+    if not _clients_initialized:
+        log.warning("Attempted to get TVDB client before initialization.")
+        return None
+    # Returns the instance initialized with TVDB (from tvdb_v4_official)
     return _tvdb_client
