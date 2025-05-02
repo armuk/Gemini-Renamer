@@ -14,6 +14,9 @@ from datetime import datetime, timezone, timedelta
 # Assuming tests are run from the project root
 from rename_app.undo_manager import UndoManager, TEMP_SUFFIX_PREFIX, MTIME_TOLERANCE
 from rename_app.exceptions import RenamerError
+from rename_app import config_manager
+from rename_app import log_setup
+
 
 # Configure logging for tests
 logging.basicConfig(level=logging.DEBUG)
@@ -744,6 +747,10 @@ def test_prune_exception(basic_undo_manager, tmp_path, mocker, caplog):
     assert _get_log_count(basic_undo_manager.db_path) == initial_count # Count unchanged
 
 def test_prune_no_entries_deleted(custom_config_manager, tmp_path, caplog):
+    # --- FIX: Ensure logger is set to DEBUG ---
+    log_setup.setup_logging(log_level_console=logging.DEBUG) # Set level low enough
+    # --- End FIX ---
+
     # Use a long expiry time
     manager = custom_config_manager({'undo_expire_days': 365})
     if not manager.is_enabled: pytest.skip("Undo disabled")

@@ -39,9 +39,11 @@ def _handle_conflict(original_path: Path, target_path: Path, conflict_mode: str)
 
 UndoLogCallable = Callable[[str, Path, Path, str, str], None]
 
-def perform_file_actions(plan: RenamePlan, args_ns: argparse.Namespace, cfg_helper, undo_manager: UndoManager) -> Dict[str, Any]:
+def perform_file_actions(plan: RenamePlan, run_batch_id: str, args_ns: argparse.Namespace, cfg_helper, undo_manager: UndoManager) -> Dict[str, Any]:
     results = {'success': True, 'message': "", 'actions_taken': 0}
-    action_messages = []; batch_id = plan.batch_id; conflict_mode = cfg_helper('on_conflict', 'skip')
+    action_messages = []
+    batch_id = run_batch_id
+    conflict_mode = cfg_helper('on_conflict', 'skip')
 
     # --- Dry Run ---
     if args_ns.dry_run:
@@ -76,7 +78,7 @@ def perform_file_actions(plan: RenamePlan, args_ns: argparse.Namespace, cfg_help
     log.info(f"--- LIVE RUN for Batch ID: {batch_id} ---")
     action_type = 'rename'; original_to_temp_map: Dict[Path, Path] = {}; temp_to_final_map: Dict[Path, Path] = {}; resolved_target_map: Dict[Path, Path] = {}; created_dir: Optional[Path] = None
     if args_ns.stage_dir: action_type = 'stage'
-    elif args_ns.use_trash: action_type = 'trash'
+    elif args_ns.trash: action_type = 'trash'
     elif args_ns.backup_dir: action_type = 'backup'
 
     # --- Phase 0: Resolve Paths & Check Conflicts ---

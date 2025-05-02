@@ -15,6 +15,11 @@ def setup_logging(log_level_console=logging.INFO, log_file=None):
 
     console_handler = logging.StreamHandler(sys.stderr)
     console_handler.setLevel(log_level_console)
+    
+    # --- Add this line ---
+    print(f"DEBUG_CHECK: Console handler level set to: {logging.getLevelName(console_handler.level)}", file=sys.stderr)
+    # --- End Add ---
+
     console_formatter = logging.Formatter(log_fmt_console, datefmt='%H:%M:%S')
     console_handler.setFormatter(console_formatter)
     log.addHandler(console_handler)
