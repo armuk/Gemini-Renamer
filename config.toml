@@ -1,6 +1,7 @@
 [default]
 # General settings applied unless overridden by a profile or command line
 log_file = "renamer.log"
+log_level = "INFO"
 enable_undo = true
 use_metadata = true
 recursive = false

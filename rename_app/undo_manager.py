@@ -98,8 +98,8 @@ class UndoManager:
 
     def log_action(self, batch_id, original_path, new_path, item_type, status):
         if not self.is_enabled:
-            return
-
+            return False
+        
         orig_p = Path(original_path)
         original_size = None
         original_mtime = None
@@ -122,7 +122,6 @@ class UndoManager:
             except Exception as e:
                 log.exception(f"Unexpected error getting stats for '{original_path}' during log_action: {e}")
 
-
         try:
             with self._connect() as conn:
                 conn.execute("""
@@ -131,15 +130,17 @@ class UndoManager:
                 """, (
                     batch_id, datetime.now(timezone.utc).isoformat(), str(original_path), str(new_path), item_type, status, original_size, original_mtime
                 ))
-                conn.commit() # Ensure commit after insert
+                conn.commit()
+                return True # Success
         except sqlite3.IntegrityError as e:
-            # Log the specific error and context
             log.warning(f"Duplicate entry prevented in rename log for '{original_path}' (batch '{batch_id}'): {e}")
+            return False # Indicate failure due to constraint
         except sqlite3.Error as e:
             log.error(f"Database error during log_action for '{original_path}' (batch '{batch_id}'): {e}")
+            return False # Indicate other DB failure
         except Exception as e:
-            # Catch unexpected errors during DB operation
             log.exception(f"Unexpected error logging undo action for '{original_path}' (batch '{batch_id}'): {e}")
+            return False # Indicate unexpected failure
 
 
     def update_action_status(self, batch_id, original_path, new_status):

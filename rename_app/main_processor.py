@@ -48,7 +48,8 @@ class MainProcessor:
         # Print details about backup/stage/trash/undo based on args/config
         if self.args.backup_dir: print(f"Originals will be backed up to: {self.args.backup_dir}")
         elif self.args.stage_dir: print(f"Files will be MOVED to staging: {self.args.stage_dir}")
-        elif self.args.use_trash: print("Originals will be MOVED TO TRASH.")
+
+        elif self.args.trash: print("Originals will be MOVED TO TRASH.")
         else: print("Files will be RENAMED/MOVED IN PLACE.")
         # Use cfg helper directly here for consistency
         if self.cfg('enable_undo', False): print("Undo logging is ENABLED.")
@@ -109,11 +110,33 @@ class MainProcessor:
                             # Ensure ep_list_guess contains valid numbers if possible
                             valid_ep_list = [ep for ep in ep_list_guess if isinstance(ep, int) and ep > 0] if ep_list_guess else []
                             if valid_ep_list:
-                                 media_info.metadata = self.metadata_fetcher.fetch_series_metadata(
-                                     media_info.guess_info.get('title','Unknown Show'),
-                                     media_info.guess_info.get('season',0),
-                                     valid_ep_list
-                                 )
+                                # --- FIX: Prepare arguments BEFORE the call ---
+                                # 1. Get the raw title value from guessit
+                                guessed_title_raw = media_info.guess_info.get('title')
+
+                                # 2. Process it: take first element if list, fallback if None/empty
+                                guessed_title = (guessed_title_raw[0] if isinstance(guessed_title_raw, list) else guessed_title_raw) or 'Unknown Show'
+
+                                # 3. Get the season number
+                                season_num = media_info.guess_info.get('season', 0)
+
+                                # 4. Convert episode list to tuple
+                                episodes_tuple = tuple(valid_ep_list)
+                                # --- End Argument Preparation ---
+
+                                # --- FIX: Make ONE call with prepared arguments ---
+                                # 5. Call the fetcher function
+                                fetched_metadata = self.metadata_fetcher.fetch_series_metadata(
+                                    guessed_title,  # Pass the processed string title
+                                    season_num,     # Pass the season number
+                                    episodes_tuple  # Pass the tuple of episodes
+                                )
+
+                                # 6. Assign the result to media_info.metadata
+                                media_info.metadata = fetched_metadata
+                                # --- End FIX ---
+
+    
                         elif media_info.file_type == 'movie':
                              media_info.metadata = self.metadata_fetcher.fetch_movie_metadata(
                                  media_info.guess_info.get('title','Unknown Movie'),
@@ -171,15 +194,22 @@ class MainProcessor:
                         ep_list_guess = media_info.guess_info.get('episode_list', [media_info.guess_info.get('episode')])
                         valid_ep_list = [ep for ep in ep_list_guess if isinstance(ep, int) and ep > 0] if ep_list_guess else []
                         if valid_ep_list:
-                             media_info.metadata = self.metadata_fetcher.fetch_series_metadata(
-                                 media_info.guess_info.get('title','Unknown Show'),
-                                 media_info.guess_info.get('season',0),
-                                 valid_ep_list
+                             # --- FIX: Convert list to tuple for caching ---
+                                guessed_title_raw = media_info.guess_info.get('title')
+                                guessed_title = (guessed_title_raw[0] if isinstance(guessed_title_raw, list) else guessed_title_raw) or 'Unknown Show'
+                                media_info.metadata = self.metadata_fetcher.fetch_series_metadata(
+                                guessed_title, # Use the processed title
+                                media_info.guess_info.get('season', 0),
+                            tuple(valid_ep_list) # Convert to tuple here
                              )
+                             # --- End FIX ---
                     elif media_info.file_type == 'movie':
-                         media_info.metadata = self.metadata_fetcher.fetch_movie_metadata(
-                             media_info.guess_info.get('title','Unknown Movie'),
-                             media_info.guess_info.get('year')
+                        # Inside the 'elif media_info.file_type == 'movie':' block
+                        guessed_title_raw = media_info.guess_info.get('title')
+                        guessed_title = (guessed_title_raw[0] if isinstance(guessed_title_raw, list) else guessed_title_raw) or 'Unknown Movie'
+                        media_info.metadata = self.metadata_fetcher.fetch_movie_metadata(
+                            guessed_title,
+                            media_info.guess_info.get('year')
                          )
 
                 # b. Plan Rename Actions
@@ -213,6 +243,7 @@ class MainProcessor:
                         # Pass the whole undo_manager instance, not just one method
                         action_result = perform_file_actions(
                             plan=plan,
+                            run_batch_id=batch_id,
                             args_ns=self.args,
                             cfg_helper=self.cfg,
                             undo_manager=self.undo_manager # <-- Pass the instance

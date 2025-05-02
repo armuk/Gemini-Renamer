@@ -17,7 +17,7 @@ from rename_app.api_clients import initialize_api_clients
 from rename_app.exceptions import RenamerError, UserAbortError
 
 # Setup root logger initially to catch early errors
-logging.basicConfig(level=logging.INFO, format='%(levelname)-8s: %(message)s')
+#logging.basicConfig(level=logging.INFO, format='%(levelname)-8s: %(message)s')
 log = logging.getLogger("rename_app") # Get the app's logger
 
 
@@ -34,6 +34,11 @@ def main(argv=None):
         log_level_str = cfg('log_level', 'INFO') # Uses helper
         log_file_arg = getattr(args, 'log_file', None) # Check specific command arg
         log_file = cfg('log_file', None, arg_value=log_file_arg)
+
+        # --- Add this line for debugging ---
+        print(f"DEBUG_CHECK: Effective log_level_str read for setup: '{log_level_str}'", file=sys.stderr)
+        # --- End Add ---
+
         setup_logging(
             log_level_console=getattr(logging, log_level_str.upper()),
             log_file=log_file

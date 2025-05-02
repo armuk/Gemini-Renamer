@@ -73,10 +73,25 @@ def find_best_match(title_to_find, api_results, result_key='title', id_key='id',
     if not choices: return None
     best = fuzz_process.extractOne(title_to_find, choices, score_cutoff=score_cutoff)
     if best:
-        best_id, score, _ = best; log.debug(f"Fuzzy match '{title_to_find}': '{choices[best_id]}' (ID:{best_id}) score {score}")
+        # --- FIX: Correct unpacking ---
+        # Original: best_id, score, _ = best
+        # Correct : value, score, key = best
+        matched_value, score, best_id = best
+        # --- End FIX ---
+
+        # Now 'best_id' holds the actual ID (the key from choices)
+        # Log using the value that was matched and the correct ID
+        log.debug(f"Fuzzy match '{title_to_find}': '{matched_value}' (ID:{best_id}) score {score}")
+
+        # This loop should now work correctly as best_id is the ID    
         for r in api_results:
-            if getattr(r, id_key, None) == best_id: return r
-    else: log.warning(f"Fuzzy match failed for '{title_to_find}' (cutoff {score_cutoff})"); return None
+            if getattr(r, id_key, None) == best_id: 
+                return r
+    else:
+        log.warning(f"Fuzzy match failed for '{title_to_find}' (cutoff {score_cutoff})");
+        return None
+    # Add a fallback return None if the loop doesn't find the match for some reason
+    return None
 
 # --- External ID Helper ---
 def get_external_ids(tmdb_obj=None, tvdb_obj=None):
@@ -122,15 +137,15 @@ class MetadataFetcher:
         # (Implementation as before - calls _fetch_tmdb_series etc.)
         log.debug(f"Fetching series metadata for: '{show_title_guess}' S{season_num}E{episode_num_list}")
         final_meta = MediaMetadata(is_series=True)
-        tmdb_show_data, tmdb_ep_map, tmdb_ids = self._fetch_tmdb_series(show_title_guess, season_num, episode_num_list)
-        tvdb_show_data, tvdb_ep_map, tvdb_ids = None, None, None
+        tmdb_show_data, tmdb_ep_map, tmdb_ids = None, None, None # Initialize
+        tvdb_show_data, tvdb_ep_map, tvdb_ids = None, None, None # Initialize
 
         if not tmdb_show_data: # Try TVDB if TMDB fails
             imdb_id = tmdb_ids.get('imdb_id') if tmdb_ids else None
             tvdb_id = tmdb_ids.get('tvdb_id') if tmdb_ids else None
             log.debug("TMDB failed or no match, trying TVDB...")
+            # Correct version (should be around line 147):
             tvdb_show_data, tvdb_ep_map, tvdb_ids = self._fetch_tvdb_series(show_title_guess, season_num, episode_num_list, imdb_id, tvdb_id)
-
         # Combine results
         final_meta.source_api = "tmdb" if tmdb_show_data else ("tvdb" if tvdb_show_data else None)
         # Use __dict__.get for TMDB data as details might be dicts
@@ -165,73 +180,175 @@ class MetadataFetcher:
         fetch_func = self.retry_decorator(self._do_fetch_tmdb_series)
         try:
             self.rate_limiter.wait()
+            # return fetch_func(title, year)
             return fetch_func(title, season, episodes)
-        except Exception as e: log.error(f"TMDB series fetch ultimately failed for '{title}': {e}"); return None, None, None
+        except Exception as e:
+             # --- MODIFIED LOGGING ---
+            log.error(
+                f"TMDB movie fetch ultimately failed for '{title}': "
+                f"Type={type(e)}, Repr={repr(e)}, Str={e}",
+                exc_info=True # Add traceback
+            )
+             # --- END MODIFIED LOGGING ---
+            return None, None, None
 
-    def _do_fetch_tmdb_series(self, title, season, episodes):
-        # (Implementation as before)
-        from tmdbv3api import Tv # Import here
-        search = Tv()
-        results = search.search(title)
-        show_match = find_best_match(title, results, result_key='name')
-        if not show_match: return None, None, None
-        show_id = show_match.id
-        show_details = search.details(show_id)
-        try: show_external_ids = search.external_ids(show_id)
-        except Exception: show_external_ids = {}
-        # Combine details and external IDs safely
-        combined_show_data = show_details.__dict__ if hasattr(show_details, '__dict__') else {}
-        combined_show_data['external_ids'] = show_external_ids
-
-        ep_data = {}
-        for ep_num in episodes:
-            self.rate_limiter.wait()
-            try:
-                ep_details = search.episode_details(show_id, season, ep_num)
-                if ep_details: ep_data[ep_num] = ep_details
-            except Exception as e_ep: log.debug(f"TMDB error S{season}E{ep_num}: {e_ep}")
-        return combined_show_data, ep_data, get_external_ids(tmdb_obj=combined_show_data)
-
-
+    # --- ADD THIS MISSING METHOD DEFINITION ---
     def _fetch_tvdb_series(self, title, season, episodes, imdb_id=None, tvdb_id=None):
-        # (Implementation as before)
-        if not self.tvdb: return None, None, None
+        """Wrapper for TVDB series fetching with retries and rate limiting."""
+        if not self.tvdb:
+            log.debug("TVDB client not available, skipping TVDB fetch.")
+            return None, None, None
+
+        # Get the decorated function (applies retry logic)
         fetch_func = self.retry_decorator(self._do_fetch_tvdb_series)
+
         try:
-            self.rate_limiter.wait()
+            self.rate_limiter.wait() # Apply rate limit before calling
+            # Call the core logic function with all necessary arguments
             return fetch_func(title, season, episodes, imdb_id, tvdb_id)
-        except Exception as e: log.error(f"TVDB series fetch ultimately failed for '{title}': {e}"); return None, None, None
+        except Exception as e:
+            # Log detailed error if the fetch ultimately fails after retries
+            log.error(
+                f"TVDB series fetch ultimately failed for '{title}': "
+                f"Type={type(e)}, Repr={repr(e)}, Str={e}",
+                exc_info=True # Include traceback in log
+            )
+            # Return the expected number of None values
+            return None, None, None
+    # --- END ADDED METHOD DEFINITION ---
 
     def _do_fetch_tvdb_series(self, title, season, episodes, imdb_id, tvdb_id):
-        # (Implementation as before)
-        show = None
-        if tvdb_id:
-             try: show = self.tvdb.get_series_by_id(tvdb_id); log.debug(f"TVDB found by TVDB ID: {tvdb_id}")
-             except Exception: pass
-        if not show and imdb_id:
-             try: show = self.tvdb.get_series_by_imdb_id(imdb_id); log.debug(f"TVDB found by IMDB ID: {imdb_id}")
-             except Exception: pass
-        if not show:
-             try:
-                 results = self.tvdb.search(title)
-                 if results: show = results[0]; log.debug(f"TVDB found by name: {title}")
-             except Exception as e: log.debug(f"TVDB name search failed: {e}")
+        # --- CORRECTED LOGIC STRUCTURE ---
+        show = None # Initialize show
 
-        if not show: return None, None, None
-        show_data = getattr(show, 'data', show)
+        # 1. Try by TVDB ID
+        if tvdb_id:
+            try:
+                show = self.tvdb.get_series_by_id(tvdb_id)
+                if show: # Check if found
+                    log.debug(f"TVDB found by TVDB ID: {tvdb_id}")
+            except Exception as e_tvdbid:
+                log.debug(f"TVDB ID lookup failed for {tvdb_id}: {e_tvdbid}")
+                # show remains None
+
+        # 2. Try by IMDB ID (only if not found yet)
+        if not show and imdb_id:
+            try:
+                # --- Use the correct IMDB ID lookup function ---
+                # show = self.tvdb.search(title) # Incorrect function used previously
+                show = self.tvdb.get_series_by_imdb_id(imdb_id)
+                if show: # Check if found
+                    log.debug(f"TVDB found by IMDB ID: {imdb_id}")
+            except Exception as e_imdb:
+                log.debug(f"TVDB IMDB ID lookup failed for {imdb_id}: {e_imdb}", exc_info=True) # Add traceback here
+                # show remains None
+
+        # 3. Try by Name Search (only if not found yet)
+        if not show:
+            try:
+                log.debug(f"TVDB attempting name search for: '{title}'")
+                results = self.tvdb.search(title)
+                if results:
+                    # Use find_best_match for name search consistency
+                    show = find_best_match(title, results, result_key='seriesName', id_key='id')
+                    if show:
+                        log.debug(f"TVDB found by name search (Best Match): {getattr(show, 'seriesName', 'N/A')} (ID: {getattr(show, 'id', 'N/A')})")
+                    else:
+                        log.debug(f"TVDB name search returned results but no good fuzzy match for '{title}'.")
+                else:
+                    log.debug(f"TVDB name search returned no results for '{title}'.")
+            except Exception as e_search:
+                log.debug(
+                    f"TVDB name search failed with exception: Type={type(e_search)}, Repr={repr(e_search)}, Str={e_search}",
+                    exc_info=True
+                )
+                # show remains None
+
+        # 4. Final Check: If still no show found after all attempts, return Nones
+        if not show:
+            log.warning(f"TVDB: Could not find series '{title}' by TVDB ID, IMDB ID, or Name search.")
+            return None, None, None
+
+        # --- If show WAS found, proceed to get episode data ---
+        log.debug(f"TVDB using show: {getattr(show, 'seriesName', 'N/A')} (ID: {getattr(show, 'id', 'N/A')})")
+        show_data = getattr(show, 'data', show) # Get the underlying data structure
 
         ep_data = {}
         for ep_num in episodes:
             try:
+                # Access episode data from the found show object
+                # This assumes the tvdb_api library allows dictionary-like access show[season][ep_num]
+                # If this fails, you'd need to check the library's specific methods
                 ep_details = show[season][ep_num]
                 ep_data[ep_num] = {
                     'id': getattr(ep_details, 'id', None),
                     'episodeName': getattr(ep_details, 'episodeName', None),
                     'firstAired': getattr(ep_details, 'firstAired', None),
                 }
-            except Exception as e_ep: log.debug(f"TVDB error S{season}E{ep_num}: {e_ep}")
-        return show_data, ep_data, get_external_ids(tvdb_obj=show_data)
+                log.debug(f"TVDB fetched S{season}E{ep_num}: {ep_data[ep_num].get('episodeName')}")
+            except Exception as e_ep:
+                log.debug(f"TVDB error getting S{season}E{ep_num} details: {e_ep}", exc_info=False) # Keep traceback off unless needed
 
+        # 5. Return the found data
+        return show_data, ep_data, get_external_ids(tvdb_obj=show_data)
+        # --- END CORRECTED LOGIC STRUCTURE ---
+        
+# rename_app/metadata_fetcher.py -> inside _do_fetch_tmdb_series function
+
+    def _do_fetch_tmdb_series(self, title, season, episodes):
+        # Import necessary classes from the library
+        from tmdbv3api import TV, Season # <<< Ensure Season is imported
+
+        search = TV() # TV object for searching and main details
+        results = search.search(title)
+        show_match = find_best_match(title, results, result_key='name')
+        if not show_match: return None, None, None
+
+        show_id = show_match.id
+        # Get main show details (This part seems to work)
+        show_details = search.details(show_id)
+        try:
+            show_external_ids = search.external_ids(show_id)
+        except Exception:
+            show_external_ids = {}
+        combined_show_data = show_details.__dict__ if hasattr(show_details, '__dict__') else {}
+        combined_show_data['external_ids'] = show_external_ids
+
+        # --- START REVISED EPISODE FETCHING (Attempt 2) ---
+        ep_data = {}
+        try:
+            # 1. Instantiate a Season object SEPARATELY
+            season_fetcher = Season()
+
+            # 2. Get the details for the specific season using the Season object
+            self.rate_limiter.wait() # Apply rate limit before getting season details
+            season_details = season_fetcher.details(tv_id=show_id, season_num=season) # Use tv_id=
+
+            # 3. Check if the season_details object has the episodes attribute
+            if hasattr(season_details, 'episodes'):
+                # Create a dictionary mapping episode number -> episode object
+                episodes_in_season = {ep.episode_number: ep for ep in season_details.episodes}
+
+                # 4. Loop through the episode numbers WE NEED
+                for ep_num in episodes:
+                    # Look up the pre-fetched episode object
+                    episode_obj = episodes_in_season.get(ep_num)
+                    if episode_obj:
+                        ep_data[ep_num] = episode_obj # Store the fetched episode object
+                    else:
+                        # This episode wasn't in the season details fetched
+                        log.debug(f"TMDB episode S{season}E{ep_num} not found in season details results.")
+                        # Optionally, you could try fetching the episode individually here
+                        # using an Episode object, but often season details include all episodes
+            else:
+                log.warning(f"TMDB season details result for S{season} (ID {show_id}) does not have 'episodes' attribute.")
+
+        except Exception as e_season:
+            # Log if getting the Season object/details itself failed
+            log.warning(f"TMDB error getting season {season} details for show ID {show_id}: {e_season}", exc_info=True)
+        # --- END REVISED EPISODE FETCHING (Attempt 2) ---
+
+        return combined_show_data, ep_data, get_external_ids(tmdb_obj=combined_show_data)
 
     @lru_cache(maxsize=128)
     def fetch_movie_metadata(self, movie_title_guess, year_guess):
@@ -267,7 +384,7 @@ class MetadataFetcher:
         # (Implementation as before)
         from tmdbv3api import Movie # Import here
         search = Movie()
-        results = search.search(title, year=year)
+        results = search.search(title)
         movie_match = find_best_match(title, results, result_key='title')
         if not movie_match: return None, None
         movie_id = movie_match.id

@@ -47,23 +47,37 @@ class ConfigManager:
 
     def _load_env_keys(self):
         keys = {}
+        env_path = None # Initialize env_path
         try:
-            # find_dotenv searches cwd and parent dirs
-            env_path = find_dotenv(usecwd=True) # Start search from cwd
+            env_path = find_dotenv(usecwd=True)
             if env_path:
                 log.debug(f"Loading environment variables from: {env_path}")
                 load_dotenv(dotenv_path=env_path)
-                keys['tmdb_api_key'] = os.getenv("TMDB_API_KEY")
-                keys['tvdb_api_key'] = os.getenv("TVDB_API_KEY")
-                keys['tmdb_language'] = os.getenv("TMDB_LANGUAGE") # Load language from env too
-                if any(keys.values()):
-                     log.info("Loaded API keys/settings from .env file.")
-                else:
-                     log.debug(".env file found but no relevant keys set.")
+                # Load keys even if file wasn't necessarily loaded successfully by load_dotenv
+                # os.getenv will return None if not set
             else:
                 log.debug(".env file not found.")
+
         except Exception as e:
-            log.warning(f"Error loading .env file: {e}")
+            log.warning(f"Error accessing or processing .env file: {e}")
+        finally:
+            # --- FIX: Always populate standard keys ---
+            keys['tmdb_api_key'] = os.getenv("TMDB_API_KEY")
+            keys['tvdb_api_key'] = os.getenv("TVDB_API_KEY")
+            keys['tmdb_language'] = os.getenv("TMDB_LANGUAGE")
+            # --- End FIX ---
+
+            # Log only if any actual values were loaded from env
+            if any(v for k, v in keys.items() if k.endswith('_api_key')): # Check only keys
+                 if env_path: # Check if we actually found a file path
+                     log.info("Loaded API keys/settings from .env file.")
+                 else: # Keys might be set in system env vars without a file
+                     log.info("Loaded API keys/settings from environment variables.")
+            elif env_path: # File found but no keys in it or system env
+                 log.debug(".env file found but no relevant keys set.")
+            # else: # No file found and no relevant system env vars
+                # log.debug("No relevant environment variables found.") # Already logged .env not found
+
         return keys
 
     def get_value(self, key, profile='default', command_line_value=None, default_value=None):
@@ -120,10 +134,16 @@ class ConfigHelper:
 
     def get_list(self, key, default_value=None):
         """Helper to ensure list values are handled correctly from config/args."""
-        val = self(key, default_value)
-        if isinstance(val, str): # From command line
-            return [item.strip() for item in val.split(',') if item.strip()]
-        elif isinstance(val, list): # From config
+        # Check if the value specifically came from args namespace
+        cmd_line_val = getattr(self.args, key, None)
+        val = self(key, default_value=default_value, arg_value=cmd_line_val) # Get value using normal precedence
+
+        # --- FIX: Only split if the source was the command line value AND it's a string ---
+        if cmd_line_val is not None and isinstance(val, str):
+             # Only split comma-separated string if it came from command line
+             return [item.strip() for item in val.split(',') if item.strip()]
+        elif isinstance(val, list): # From config or correctly typed default
             return val
-        else: # Default or invalid
+        else: # Default (which wasn't a list) or invalid type from config
             return default_value if isinstance(default_value, list) else []
+        # --- End Fix ---
