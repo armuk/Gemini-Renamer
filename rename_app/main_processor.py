@@ -110,38 +110,40 @@ class MainProcessor:
                             # Ensure ep_list_guess contains valid numbers if possible
                             valid_ep_list = [ep for ep in ep_list_guess if isinstance(ep, int) and ep > 0] if ep_list_guess else []
                             if valid_ep_list:
-                                # --- FIX: Prepare arguments BEFORE the call ---
-                                # 1. Get the raw title value from guessit
+                                # Get the raw title value from guessit
                                 guessed_title_raw = media_info.guess_info.get('title')
-
-                                # 2. Process it: take first element if list, fallback if None/empty
+                                # Process it: take first element if list, fallback if None/empty
                                 guessed_title = (guessed_title_raw[0] if isinstance(guessed_title_raw, list) else guessed_title_raw) or 'Unknown Show'
-
-                                # 3. Get the season number
+                                # Get the season number
                                 season_num = media_info.guess_info.get('season', 0)
-
-                                # 4. Convert episode list to tuple
+                                # Convert episode list to tuple
                                 episodes_tuple = tuple(valid_ep_list)
-                                # --- End Argument Preparation ---
+                                # --- FIX: Pass year guess ---
+                                year_guess = media_info.guess_info.get('year')
+                                # --- End FIX ---
 
-                                # --- FIX: Make ONE call with prepared arguments ---
-                                # 5. Call the fetcher function
+                                # Call the fetcher function
                                 fetched_metadata = self.metadata_fetcher.fetch_series_metadata(
                                     guessed_title,  # Pass the processed string title
                                     season_num,     # Pass the season number
-                                    episodes_tuple  # Pass the tuple of episodes
+                                    episodes_tuple, # Pass the tuple of episodes
+                                    year_guess=year_guess # Pass year guess
                                 )
-
-                                # 6. Assign the result to media_info.metadata
                                 media_info.metadata = fetched_metadata
-                                # --- End FIX ---
 
-    
+
                         elif media_info.file_type == 'movie':
+                             # --- FIX: Pass year guess ---
+                             year_guess = media_info.guess_info.get('year')
+                             # --- End FIX ---
+                             # --- FIX: Use processed title ---
+                             guessed_title_raw = media_info.guess_info.get('title')
+                             guessed_title = (guessed_title_raw[0] if isinstance(guessed_title_raw, list) else guessed_title_raw) or 'Unknown Movie'
                              media_info.metadata = self.metadata_fetcher.fetch_movie_metadata(
-                                 media_info.guess_info.get('title','Unknown Movie'),
-                                 media_info.guess_info.get('year')
+                                 guessed_title, # Use processed title
+                                 year_guess     # Pass year guess
                              )
+                             # --- End FIX ---
                     # Now plan based on info gathered
                     plan = self.renamer.plan_rename(batch_data['video'], batch_data['associated'], media_info)
                     if plan.status == 'success':
@@ -194,23 +196,27 @@ class MainProcessor:
                         ep_list_guess = media_info.guess_info.get('episode_list', [media_info.guess_info.get('episode')])
                         valid_ep_list = [ep for ep in ep_list_guess if isinstance(ep, int) and ep > 0] if ep_list_guess else []
                         if valid_ep_list:
-                             # --- FIX: Convert list to tuple for caching ---
-                                guessed_title_raw = media_info.guess_info.get('title')
-                                guessed_title = (guessed_title_raw[0] if isinstance(guessed_title_raw, list) else guessed_title_raw) or 'Unknown Show'
-                                media_info.metadata = self.metadata_fetcher.fetch_series_metadata(
-                                guessed_title, # Use the processed title
-                                media_info.guess_info.get('season', 0),
-                            tuple(valid_ep_list) # Convert to tuple here
+                             guessed_title_raw = media_info.guess_info.get('title')
+                             guessed_title = (guessed_title_raw[0] if isinstance(guessed_title_raw, list) else guessed_title_raw) or 'Unknown Show'
+                             # --- FIX: Pass year guess ---
+                             year_guess = media_info.guess_info.get('year')
+                             media_info.metadata = self.metadata_fetcher.fetch_series_metadata(
+                                 guessed_title, # Use the processed title
+                                 media_info.guess_info.get('season', 0),
+                                 tuple(valid_ep_list), # Convert to tuple here
+                                 year_guess=year_guess # Pass year guess
                              )
                              # --- End FIX ---
                     elif media_info.file_type == 'movie':
-                        # Inside the 'elif media_info.file_type == 'movie':' block
                         guessed_title_raw = media_info.guess_info.get('title')
                         guessed_title = (guessed_title_raw[0] if isinstance(guessed_title_raw, list) else guessed_title_raw) or 'Unknown Movie'
+                        # --- FIX: Pass year guess ---
+                        year_guess = media_info.guess_info.get('year')
                         media_info.metadata = self.metadata_fetcher.fetch_movie_metadata(
                             guessed_title,
-                            media_info.guess_info.get('year')
+                            year_guess # Pass year guess
                          )
+                         # --- End FIX ---
 
                 # b. Plan Rename Actions
                 plan = self.renamer.plan_rename(batch_data['video'], batch_data['associated'], media_info)

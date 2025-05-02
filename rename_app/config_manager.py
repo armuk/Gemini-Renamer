@@ -1,3 +1,5 @@
+# rename_app/config_manager.py
+
 import os
 import pytomlpp
 import logging
@@ -61,11 +63,18 @@ class ConfigManager:
         except Exception as e:
             log.warning(f"Error accessing or processing .env file: {e}")
         finally:
-            # --- FIX: Always populate standard keys ---
-            keys['tmdb_api_key'] = os.getenv("TMDB_API_KEY")
-            keys['tvdb_api_key'] = os.getenv("TVDB_API_KEY")
-            keys['tmdb_language'] = os.getenv("TMDB_LANGUAGE")
+            # --- FIX: Add debug logging for key retrieval ---
+            tmdb_key_env = os.getenv("TMDB_API_KEY")
+            tvdb_key_env = os.getenv("TVDB_API_KEY")
+            tmdb_lang_env = os.getenv("TMDB_LANGUAGE")
+            log.debug(f"_load_env_keys: os.getenv('TMDB_API_KEY') = '{tmdb_key_env}'")
+            log.debug(f"_load_env_keys: os.getenv('TVDB_API_KEY') = '{tvdb_key_env}'")
+            log.debug(f"_load_env_keys: os.getenv('TMDB_LANGUAGE') = '{tmdb_lang_env}'")
             # --- End FIX ---
+
+            keys['tmdb_api_key'] = tmdb_key_env
+            keys['tvdb_api_key'] = tvdb_key_env
+            keys['tmdb_language'] = tmdb_lang_env
 
             # Log only if any actual values were loaded from env
             if any(v for k, v in keys.items() if k.endswith('_api_key')): # Check only keys

@@ -24,53 +24,107 @@ log = logging.getLogger(__name__)
 # ...
 
 class RenamerEngine:
-    # (__init__, parse_filename, _determine_file_type, _prepare_format_data, _format_new_name, _format_folder_path unchanged)
+    # (__init__, parse_filename, _determine_file_type remain the same)
     # ...
     def __init__(self, cfg_helper): self.cfg = cfg_helper
     def parse_filename(self, file_path: Path) -> Dict:
         if not GUESSIT_AVAILABLE: log.error("Guessit library not available."); return {}
         try: guess = guessit(str(file_path)); log.debug(f"Guessit: {guess}"); return guess
-        except Exception as e: log.error(f"Guessit failed: {e}"); return {}
+        except Exception as e: log.error(f"Guessit failed: {e}"); return {} # Return empty dict on failure
     def _determine_file_type(self, guess_info: Dict) -> str:
+        # --- FIX: Add check if guess_info is a dict ---
+        if not isinstance(guess_info, dict):
+            log.warning(f"Cannot determine file type, guess_info is not a dictionary: {type(guess_info)}")
+            return 'unknown'
+        # --- End FIX ---
         file_type = guess_info.get('type');
         if file_type == 'episode': return 'series'
         if file_type == 'movie': return 'movie'
         if 'season' in guess_info and 'episode' in guess_info: return 'series'
         if guess_info.get('year') and 'title' in guess_info: return 'movie'
         log.debug(f"Could not determine type from guess: {guess_info}"); return 'unknown'
+
     def _prepare_format_data(self, media_info: MediaInfo) -> Dict[str, Any]:
+        # --- FIX: Ensure guess_info is a dictionary ---
+        if not isinstance(media_info.guess_info, dict):
+            log.error(f"Cannot prepare format data for '{media_info.original_path.name}'. "
+                      f"Expected guess_info to be a dict, but got {type(media_info.guess_info)}. "
+                      f"Falling back to minimal data.")
+            # Return a minimal dictionary with essential fallback data
+            return {
+                'ext': media_info.original_path.suffix,
+                'original_filename': media_info.original_path.name,
+                'original_stem': media_info.original_path.stem,
+                'title': media_info.original_path.stem, # Fallback title
+                'show_title': media_info.original_path.stem,
+                'movie_title': media_info.original_path.stem,
+                # Add other essential keys used in formats with default values
+                'season': 0,
+                'episode': 0,
+                'episode_list': [],
+                'year': None,
+                'movie_year': None,
+                'show_year': None,
+                'episode_title': 'Unknown Episode',
+                'scene_tags': [],
+                'scene_tags_dot': '',
+            }
+        # --- End FIX ---
+
         data = media_info.guess_info.copy(); metadata = media_info.metadata
         data['ext'] = media_info.original_path.suffix; data['original_filename'] = media_info.original_path.name; data['original_stem'] = media_info.original_path.stem
         tags_to_preserve = self.cfg.get_list('scene_tags_to_preserve', []); scene_tags_list, scene_tags_dot = [], ""
-        if tags_to_preserve: scene_tags_list, scene_tags_dot = extract_scene_tags(data['original_filename'], tuple(tags_to_preserve))
+        # --- FIX: Ensure original_filename is not None before passing to extract_scene_tags ---
+        original_filename_for_tags = data.get('original_filename', '')
+        if tags_to_preserve and original_filename_for_tags:
+             scene_tags_list, scene_tags_dot = extract_scene_tags(original_filename_for_tags, tuple(tags_to_preserve))
+        # --- End FIX ---
         data['scene_tags'] = scene_tags_list; data['scene_tags_dot'] = scene_tags_dot
+
+        # --- FIX: Add None checks before sanitize_os_chars ---
         if metadata:
              data['source_api'] = metadata.source_api; data['ids'] = metadata.ids
              if metadata.is_series:
-                 data['show_title'] = sanitize_os_chars(metadata.show_title) if metadata.show_title else data.get('title', 'Unknown_Show')
+                 show_title_raw = metadata.show_title if metadata.show_title else data.get('title', 'Unknown_Show')
+                 data['show_title'] = sanitize_os_chars(show_title_raw) if show_title_raw else 'Unknown_Show' # Check raw before sanitizing
                  data['show_year'] = metadata.show_year; data['season'] = metadata.season; data['episode_list'] = metadata.episode_list or []
                  ep_list = sorted(data['episode_list'])
                  if len(ep_list) > 1:
                      data['episode_range'] = f"E{ep_list[0]:0>2}-E{ep_list[-1]:0>2}"
-                     titles = [sanitize_os_chars(metadata.episode_titles.get(ep, f'Ep_{ep}')) for ep in ep_list]; specific_titles = [t for t in titles if not t.startswith("Ep_")]
+                     # Sanitize titles individually after retrieval
+                     titles_raw = [metadata.episode_titles.get(ep, f'Ep_{ep}') for ep in ep_list]
+                     titles = [sanitize_os_chars(t) if t else f'Ep_{ep}' for ep, t in zip(ep_list, titles_raw)]
+                     specific_titles = [t for t in titles if not t.startswith("Ep_")]
                      data['episode_title'] = " & ".join(specific_titles if specific_titles else titles[:1]); data['episode'] = ep_list[0]
                  elif ep_list:
                      data['episode'] = ep_list[0]; ep_title_meta = metadata.episode_titles.get(data['episode'])
                      data['episode_title'] = sanitize_os_chars(ep_title_meta) if ep_title_meta else data.get('episode_title', f"Episode_{data['episode']}")
                  data['air_date'] = next(iter(metadata.air_dates.values()), data.get('date'))
              elif metadata.is_movie:
-                 data['movie_title'] = sanitize_os_chars(metadata.movie_title) if metadata.movie_title else data.get('title', 'Unknown_Movie')
+                 movie_title_raw = metadata.movie_title if metadata.movie_title else data.get('title', 'Unknown_Movie')
+                 data['movie_title'] = sanitize_os_chars(movie_title_raw) if movie_title_raw else 'Unknown_Movie' # Check raw before sanitizing
                  data['movie_year'] = metadata.movie_year or data.get('year'); data['release_date'] = metadata.release_date
         else:
-             data.setdefault('show_title', sanitize_os_chars(data.get('title', 'Unknown Show')))
-             data.setdefault('movie_title', sanitize_os_chars(data.get('title', 'Unknown Movie')))
-             data.setdefault('episode_title', sanitize_os_chars(data.get('episode_title', f"Episode_{data.get('episode', 0)}")))
+             # Fallback when no metadata - sanitize titles retrieved from guessit data
+             show_title_guess = data.get('title', 'Unknown Show')
+             data.setdefault('show_title', sanitize_os_chars(show_title_guess) if show_title_guess else 'Unknown Show')
+             movie_title_guess = data.get('title', 'Unknown Movie')
+             data.setdefault('movie_title', sanitize_os_chars(movie_title_guess) if movie_title_guess else 'Unknown Movie')
+             episode_title_guess = data.get('episode_title', f"Episode_{data.get('episode', 0)}")
+             data.setdefault('episode_title', sanitize_os_chars(episode_title_guess) if episode_title_guess else f"Episode_{data.get('episode', 0)}")
+        # --- End FIX ---
+
         data.setdefault('season', 0); data.setdefault('episode', 0); data.setdefault('episode_list', [data['episode']])
-        if 'episode_title' not in data: data['episode_title'] = f"Episode_{data['episode']}"
+        # Ensure episode_title exists if single episode
+        if len(data['episode_list']) == 1 and 'episode_title' not in data:
+             episode_title_guess = data.get('episode_title', f"Episode_{data.get('episode', 0)}") # Check if guessit had one
+             data['episode_title'] = sanitize_os_chars(episode_title_guess) if episode_title_guess else f"Episode_{data.get('episode', 0)}"
+
         data.setdefault('movie_year', data.get('year')); data.setdefault('show_year', data.get('year'))
         if len(data['episode_list']) > 1 and 'episode_range' not in data: ep_list = sorted(data['episode_list']); data['episode_range'] = f"E{ep_list[0]:0>2}-E{ep_list[-1]:0>2}"
-        for gk, gv in media_info.guess_info.items(): data.setdefault(gk, gv)
+        for gk, gv in media_info.guess_info.items(): data.setdefault(gk, gv) # Add remaining guessit keys if not already set
         log.debug(f"Prepared format data: {data}"); return data
+    
     def _format_new_name(self, media_info: MediaInfo, format_data: Dict) -> str:
         mode = media_info.file_type; format_str_key = 'series_format' if mode == 'series' else 'movie_format'; format_str = self.cfg(format_str_key, default_value='').replace("{ext}", "")
         if not format_str: fallback_format = "{original_stem}_renamed".replace("{ext}", ""); log.warning(f"Missing format '{format_str_key}'. Using fallback: '{fallback_format}'"); format_str = fallback_format
