@@ -5,6 +5,9 @@
 import logging
 import time
 from functools import lru_cache
+# --- Add TYPE_CHECKING ---
+from typing import Optional, Tuple, TYPE_CHECKING
+# --- End Add ---
 from .api_clients import get_tmdb_client, get_tvdb_client
 from .exceptions import MetadataError
 from .models import MediaMetadata
@@ -17,23 +20,15 @@ except ImportError: TENACITY_AVAILABLE = False; RetryError = Exception # Fallbac
 try: import dateutil.parser; DATEUTIL_AVAILABLE = True
 except ImportError: DATEUTIL_AVAILABLE = False
 
-# Import API specific exceptions and requests exceptions for retry logic
-try:
-    from tvdb_v4_official.errors import NotFoundError as TvdbNotFoundError, TvdbApiException
-except ImportError:
-    # Define fallbacks if library not installed
-    TvdbNotFoundError = type('TvdbNotFoundError', (Exception,), {})
-    TvdbApiException = type('TvdbApiException', (Exception,), {})
-
+# Import requests exceptions for retry logic
 try:
     import requests.exceptions as req_exceptions
 except ImportError:
-    # Define fallback class if requests isn't installed (though it likely is)
-    class req_exceptions:
+    class req_exceptions: # Define fallback class
         ConnectionError = type('ConnectionError', (IOError,), {})
         Timeout = type('Timeout', (IOError,), {})
         RequestException = type('RequestException', (IOError,), {})
-        HTTPError = type('HTTPError', (RequestException,), {'response': type('MockResponse', (), {'status_code': 0})()}) # Mock response for checks
+        HTTPError = type('HTTPError', (RequestException,), {'response': type('MockResponse', (), {'status_code': 0})()})
 
 # Import TMDB exceptions if they exist and are useful for status codes
 try:
@@ -45,7 +40,33 @@ except ImportError:
 try: from tmdbv3api.as_obj import AsObj
 except ImportError: AsObj = None # Fallback
 
-log = logging.getLogger(__name__)
+# --- START TVDB Exception Handling ---
+log = logging.getLogger(__name__) # Define logger early
+
+# Define Fallback exceptions FIRST to satisfy linters
+# Use a common dummy base if the library might be entirely absent
+_TvdbBaseException = type('TvdbBaseException', (Exception,), {})
+TvdbNotFoundError = type('TvdbNotFoundError', (_TvdbBaseException,), {})
+TvdbApiException = type('TvdbApiException', (_TvdbBaseException,), {})
+
+# Now, try to import the REAL exceptions, overwriting the fallbacks
+try:
+    from tvdb_v4_official.errors import NotFoundError as TvdbNotFoundError, TvdbApiException as TvdbApiException
+    log.debug("Successfully imported real TVDB API exceptions.")
+except ImportError:
+    log.warning("Could not import exceptions from 'tvdb_v4_official'. Using fallback exception types. TVDB fetching might fail.")
+    # Fallbacks are already defined, so just pass
+    pass
+
+# Optional: Add a TYPE_CHECKING block for MyPy and other advanced type checkers
+# This helps them understand the 'real' type without causing runtime errors
+if TYPE_CHECKING:
+    try:
+        from tvdb_v4_official.errors import NotFoundError as TvdbNotFoundError, TvdbApiException as TvdbApiException
+    except ImportError:
+        # Type checker will use the fallbacks defined above if it can't find the module
+        pass
+# --- END TVDB Exception Handling ---
 
 # --- Sync Rate Limiter ---
 class SyncRateLimiter:
