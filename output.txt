@@ -1,14 +1,10 @@
 ------------------------------
-DRY RUN: Would rename 'The.Eternaut.S01E01.DUAL.720p.NF.WEB-DL.x264-MIKE.mkv' -> '/Users/alexmunroe/Downloads/The.Eternaut.Season.1.COMPLETE.DUAL.720p.NF.WEB-DL.x264.ESubs.S01.Full-MIKE/The Eternaut - S01E01 - Full-MIKE.mkv'
-DRY RUN: Would rename 'The.Eternaut.S01E03.DUAL.720p.NF.WEB-DL.x264-MIKE.mkv' -> '/Users/alexmunroe/Downloads/The.Eternaut.Season.1.COMPLETE.DUAL.720p.NF.WEB-DL.x264.ESubs.S01.Full-MIKE/The Eternaut - S01E03 - Full-MIKE.mkv'
-DRY RUN: Would rename 'The.Eternaut.S01E02.DUAL.720p.NF.WEB-DL.x264-MIKE.mkv' -> '/Users/alexmunroe/Downloads/The.Eternaut.Season.1.COMPLETE.DUAL.720p.NF.WEB-DL.x264.ESubs.S01.Full-MIKE/The Eternaut - S01E02 - Full-MIKE.mkv'
-DRY RUN: Would rename 'The.Eternaut.S01E04.DUAL.720p.NF.WEB-DL.x264-MIKE.mkv' -> '/Users/alexmunroe/Downloads/The.Eternaut.Season.1.COMPLETE.DUAL.720p.NF.WEB-DL.x264.ESubs.S01.Full-MIKE/The Eternaut - S01E04 - Full-MIKE.mkv'
-DRY RUN: Would rename 'The.Eternaut.S01E06.DUAL.720p.NF.WEB-DL.x264-MIKE.mkv' -> '/Users/alexmunroe/Downloads/The.Eternaut.Season.1.COMPLETE.DUAL.720p.NF.WEB-DL.x264.ESubs.S01.Full-MIKE/The Eternaut - S01E06 - Full-MIKE.mkv'
-DRY RUN: Would rename 'The.Eternaut.S01E05.DUAL.720p.NF.WEB-DL.x264-MIKE.mkv' -> '/Users/alexmunroe/Downloads/The.Eternaut.Season.1.COMPLETE.DUAL.720p.NF.WEB-DL.x264.ESubs.S01.Full-MIKE/The Eternaut - S01E05 - Full-MIKE.mkv'
+DRY RUN: Would rename 'The.Studio.2025.S01E07.Casting.1080p.ATVP.WEB-DL.DDP5.1.Atmos.H.264-FLUX.mkv' -> '/Users/alexmunroe/Downloads/Test files/The Studio - S01E07 - Casting.mkv'
+DRY RUN: Would rename 'Another.Simple.Favor.2025.1080p.WEB-DL.DDP5.1.x265-NeoNoir.mkv' -> '/Users/alexmunroe/Downloads/Test files/Another Simple Favor (2025).mkv'
 ------------------------------
 Processing Summary:
-  Batches Scanned: 6
-  Batches Successfully Processed: 6
+  Batches Scanned: 2
+  Batches Successfully Processed: 2
   Batches Skipped: 0
   Batches with Errors: 0
 ------------------------------
