@@ -280,6 +280,9 @@ def find_best_match(title_to_find, api_results_tuple, result_key='title', id_key
 
 # --- External ID Helper (remains synchronous) ---
 def get_external_ids(tmdb_obj=None, tvdb_obj=None):
+    """
+    Extracts external IDs (IMDb, TMDB, TVDB) and TMDB collection info.
+    """
     # (Function unchanged)
     ids = {'imdb_id': None, 'tmdb_id': None, 'tvdb_id': None}
     try: # TMDB
@@ -300,8 +303,29 @@ def get_external_ids(tmdb_obj=None, tvdb_obj=None):
             if tvdb_id_found and ids.get('tvdb_id') is None:
                 try: ids['tvdb_id'] = int(tvdb_id_found)
                 except (ValueError, TypeError): log.warning(f"Could not convert TMDB-provided TVDB ID '{tvdb_id_found}' to int.")
+
+            # --- NEW: Extract Collection Info ---
+            collection_info = None
+            # Check if it's an attribute (common for AsObj from details)
+            collection_attr = getattr(tmdb_obj, 'belongs_to_collection', None)
+            if isinstance(collection_attr, (dict, AsObj)): # Handle AsObj or dict directly
+                collection_info = collection_attr
+            elif isinstance(tmdb_obj, dict): # Check if it's in the base dict
+                collection_info = tmdb_obj.get('belongs_to_collection')
+
+            if collection_info:
+                col_id = getattr(collection_info, 'id', None) if not isinstance(collection_info, dict) else collection_info.get('id')
+                col_name = getattr(collection_info, 'name', None) if not isinstance(collection_info, dict) else collection_info.get('name')
+                if col_id:
+                    try: ids['collection_id'] = int(col_id)
+                    except (ValueError, TypeError): log.warning(f"Could not convert collection ID '{col_id}' to int.")
+                if col_name: ids['collection_name'] = str(col_name)
+            # --- END NEW ---
+
     except AttributeError as e_tmdb: log.debug(f"AttributeError parsing TMDB external IDs: {e_tmdb}")
     except Exception as e_tmdb_other: log.warning(f"Unexpected error parsing TMDB external IDs: {e_tmdb_other}", exc_info=True)
+
+    # --- TVDB Processing (Unchanged regarding Collection) ---    
     try: # TVDB
         if isinstance(tvdb_obj, dict):
              if ids.get('tvdb_id') is None:
@@ -326,7 +350,6 @@ def get_external_ids(tmdb_obj=None, tvdb_obj=None):
                      except(ValueError, TypeError): log.warning(f"Could not convert TVDB-provided TMDB ID '{tmdb_id_found}' to int.")
     except Exception as e_tvdb_ids: log.warning(f"Error parsing external IDs from TVDB object: {e_tvdb_ids}", exc_info=True)
     return {k: v for k, v in ids.items() if v is not None}
-    pass
 
 # --- TMDB AsObj to Dict Helper (remains synchronous) ---
 def _tmdb_results_to_dicts(results_iterable: Optional[Iterable[Any]], result_type: str = 'movie') -> Tuple[Dict[str, Any], ...]:
@@ -1033,7 +1056,7 @@ class MetadataFetcher:
         log.debug(f"Fetching movie metadata (async) for: '{movie_title_guess}' (Year guess: {year_guess})")
         final_meta = MediaMetadata(is_movie=True)
         tmdb_movie_data = None # Holds the detailed movie object (AsObj or dict)
-        tmdb_ids = None        # Holds the dictionary of external IDs
+        tmdb_ids = None        # Holds the dictionary of external IDs,  tmdb_ids now includes collection info
 
         lang = self.cfg('tmdb_language', 'en')
         # Create a cache key based on input parameters
@@ -1074,50 +1097,44 @@ class MetadataFetcher:
 
 
         # 3. Combine results into final MediaMetadata object
-        if tmdb_movie_data: # Check if we have valid data (from cache or fetch)
+        if tmdb_movie_data:
             try:
                 final_meta.source_api = "tmdb"
-
-                # Extract title (handle AsObj or dict)
+                # ... (extract title, release_date, movie_year as before) ...
                 title_val = getattr(tmdb_movie_data, 'title', None)
-                if title_val is None and isinstance(tmdb_movie_data, dict):
-                    title_val = tmdb_movie_data.get('title')
-                final_meta.movie_title = title_val or movie_title_guess # Fallback to guess
+                if title_val is None and isinstance(tmdb_movie_data, dict): title_val = tmdb_movie_data.get('title')
+                final_meta.movie_title = title_val or movie_title_guess
 
-                # Extract release date (handle AsObj or dict)
                 release_date_val = getattr(tmdb_movie_data, 'release_date', None)
-                if release_date_val is None and isinstance(tmdb_movie_data, dict):
-                    release_date_val = tmdb_movie_data.get('release_date')
+                if release_date_val is None and isinstance(tmdb_movie_data, dict): release_date_val = tmdb_movie_data.get('release_date')
                 final_meta.release_date = release_date_val
+                final_meta.movie_year = self._get_year_from_date(final_meta.release_date) or year_guess
 
-                log.debug(f"fetch_movie_metadata: Extracted title='{title_val}', release_date='{release_date_val}' from tmdb_movie_data")
-
-                # Calculate year
-                final_meta.movie_year = self._get_year_from_date(final_meta.release_date) or year_guess # Fallback to guess
-
-                # Assign IDs (should be a dict from _do_fetch or cache)
-                final_meta.ids = tmdb_ids if isinstance(tmdb_ids, dict) else {}
+                # --- Assign IDs AND Collection info ---
+                if isinstance(tmdb_ids, dict):
+                     final_meta.ids = tmdb_ids # Assign the whole dict
+                     # Extract collection info from the ids dict into the model fields
+                     final_meta.collection_name = tmdb_ids.get('collection_name')
+                     final_meta.collection_id = tmdb_ids.get('collection_id')
+                     log.debug(f"Extracted collection: Name='{final_meta.collection_name}', ID={final_meta.collection_id}")
+                else:
+                     final_meta.ids = {} # Ensure it's an empty dict if fetch failed
 
                 log.debug(f"fetch_movie_metadata: Successfully populated final_meta from TMDB.")
 
             except Exception as e_populate:
-                 log.error(f"Error populating final_meta from tmdb_movie_data ({type(tmdb_movie_data)}): {e_populate}", exc_info=True)
-                 # Reset if population fails, treat as fetch failure
-                 final_meta.source_api = None
+                 log.error(f"Error populating final_meta from tmdb_movie_data: {e_populate}", exc_info=True)
+                 # Reset on failure
+                 final_meta = MediaMetadata(is_movie=True) # Re-init blank
                  final_meta.movie_title = movie_title_guess
                  final_meta.movie_year = year_guess
-                 final_meta.ids = {}
-                 final_meta.release_date = None
         else:
-            # Fallback logic if fetch failed OR population failed
+           # Fallback logic
             log.warning(f"Metadata fetch ultimately failed for movie: '{movie_title_guess}' ({year_guess})")
-            final_meta.source_api = None
             final_meta.movie_title = movie_title_guess
             final_meta.movie_year = year_guess
-            final_meta.ids = {}
-            final_meta.release_date = None
 
-        log.debug(f"fetch_movie_metadata final result: Source='{final_meta.source_api}', Title='{final_meta.movie_title}', Year={final_meta.movie_year}, IDs={final_meta.ids}")
+        log.debug(f"fetch_movie_metadata final result: Source='{final_meta.source_api}', Title='{final_meta.movie_title}', Year={final_meta.movie_year}, IDs={final_meta.ids}, Collection={final_meta.collection_name}")
         return final_meta
     
     # NOTE: Decorator applied dynamically in __init__ like:

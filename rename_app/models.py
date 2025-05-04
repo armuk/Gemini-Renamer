@@ -1,3 +1,4 @@
+# models.py
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -10,11 +11,11 @@ class MediaMetadata:
     ids: Dict[str, Any] = field(default_factory=dict) # {'tmdb_id': 123, 'imdb_id': 'tt...', 'tvdb_id': 456}
 
     # Series specific
-    is_series: bool = False
-    show_title: Optional[str] = None
-    show_year: Optional[int] = None
-    season: Optional[int] = None
-    episode_list: List[int] = field(default_factory=list)
+    is_series: bool = False # Flag for series
+    show_title: Optional[str] = None # e.g., "The Office"
+    show_year: Optional[int] = None # e.g., 2005
+    season: Optional[int] = None # e.g., 1
+    episode_list: List[int] = field(default_factory=list) # [1, 2, 3]
     episode_titles: Dict[int, str] = field(default_factory=dict) # {1: "Title A", 2: "Title B"}
     air_dates: Dict[int, str] = field(default_factory=dict) # {1: "YYYY-MM-DD"}
 
@@ -23,6 +24,10 @@ class MediaMetadata:
     movie_title: Optional[str] = None
     movie_year: Optional[int] = None
     release_date: Optional[str] = None
+
+    # --- NEW: Collection Info ---
+    collection_name: Optional[str] = None
+    collection_id: Optional[int] = None
 
     # Add other fields if needed (e.g., genres)
 

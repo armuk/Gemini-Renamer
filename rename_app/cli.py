@@ -42,12 +42,15 @@ def create_parser():
     parser_rename.add_argument("--scene-tags-to-preserve", type=str, default=None, help="Comma-separated scene tags.")
     # Subtitle Encoding Arg
     parser_rename.add_argument("--subtitle-encoding-detection", action=argparse.BooleanOptionalAction, default=None, help="Detect subtitle encoding.")
+    # Memory Management Strategy Args
+    parser_rename.add_argument("--scan-strategy", choices=['memory', 'low_memory'], default=None, help="Scanning strategy ('memory': faster, uses more RAM; 'low_memory': slower, uses less RAM via temp DB).") # Default is None, let config handle it
+    # Stream Info Args
+    parser_rename.add_argument("--use-stream-info", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable extracting technical stream info (resolution, codecs) from files.")
     # Safety group
     safety_group = parser_rename.add_mutually_exclusive_group()
     safety_group.add_argument("--backup-dir", type=Path, default=None, help="Backup originals before action.")
     safety_group.add_argument("--stage-dir", type=Path, default=None, help="Move files to staging dir.")
     safety_group.add_argument("--trash", action="store_true", default=False, help="Move originals to trash.")
-
 
     # --- Undo Command Parser ---
     parser_undo = subparsers.add_parser('undo', help='Revert rename operations.')
