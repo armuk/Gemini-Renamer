@@ -8,6 +8,7 @@ recursive = false
 processing_mode = "auto"
 on_conflict = "skip" # skip, overwrite, suffix, fail
 api_rate_limit_delay = 0.5 # seconds between API calls
+extract_stream_info = true
 # --- Formats ---
 series_format = "{show_title} - S{season:0>2}E{episode:0>2} - {episode_title}{ext}"
 movie_format = "{movie_title} ({movie_year}){ext}"

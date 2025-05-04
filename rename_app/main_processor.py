@@ -161,7 +161,6 @@ async def _fetch_metadata_for_batch(batch_stem, batch_data, processor: "MainProc
         # Return original data but None for MediaInfo to signal the error downstream
         return batch_stem, batch_data, None
 
-
 class MainProcessor:
     def __init__(self, args, cfg_helper, undo_manager):
         self.args = args
@@ -171,7 +170,9 @@ class MainProcessor:
         self.renamer = RenamerEngine(cfg_helper)
         self.metadata_fetcher = None
         # Check the final effective value of use_metadata
-        if getattr(args, 'use_metadata', False):
+        # Use getattr to safely access args attribute, defaulting to False if not present
+        use_metadata_effective = getattr(args, 'use_metadata', False)
+        if use_metadata_effective:
              log.info("Metadata fetching enabled by configuration/args.")
              # MetadataFetcher init is sync and uses cfg_helper
              self.metadata_fetcher = MetadataFetcher(cfg_helper)
@@ -218,7 +219,9 @@ class MainProcessor:
             return
 
         # --- Check API Client Availability (remains sync check at start) ---
-        if self.args.use_metadata:
+        # Use final effective value for use_metadata check
+        use_metadata_effective = getattr(self.args, 'use_metadata', False)
+        if use_metadata_effective:
             log.debug("Checking API client availability as metadata is enabled.")
             tmdb_available = get_tmdb_client() is not None
             tvdb_available = get_tvdb_client() is not None
@@ -235,50 +238,64 @@ class MainProcessor:
             else:
                 log.debug("Required API clients for metadata fetching appear to be available.")
 
-        # 1. Scan files (remains sync)
-        file_batches = scan_media_files(target_dir, self.cfg)
-        if not file_batches:
-             log.warning("No valid video files/batches found matching criteria in the specified directory.")
-             return
-        log.info(f"Found {len(file_batches)} batches to process.")
-        batch_count = len(file_batches)
+        # 1. Scan files (Get Generator)
+        # scan_media_files now returns a generator directly
+        batch_generator = scan_media_files(target_dir, self.cfg)
 
-        # 2. Pre-scan & Confirmation (if live run) (remains sync)
-        if not self.args.dry_run:
+        # Convert generator to list to get count and allow multiple iterations easily.
+        try:
+            log.info("Collecting batches from scanner...")
+            # Use standard tqdm here as this part is synchronous
+            file_batches_list = list(tqdm(batch_generator, desc="Collecting Batches", unit="batch", disable=not TQDM_AVAILABLE))
+            # Convert back to dictionary
+            file_batches = {stem: data for stem, data in file_batches_list}
+            batch_count = len(file_batches)
+            log.info(f"Collected {batch_count} batches.")
+            if batch_count == 0:
+                 log.warning("No valid video files/batches found matching criteria.")
+                 return
+        except Exception as e_scan:
+             log.exception(f"Error during batch collection from scanner: {e_scan}")
+             return
+
+        # 2. Pre-scan & Confirmation (if live run) - uses file_batches dict
+        # Ensure 'live' status is correctly determined from args
+        is_live_run = getattr(self.args, 'live', False)
+        if is_live_run: # Use the effective live status
             log.info("Performing synchronous pre-scan for live run confirmation...")
             potential_actions_count = 0
             # Use standard tqdm for sync pre-scan
             prescan_iterator = tqdm(file_batches.items(), desc="Pre-scan", unit="batch", total=batch_count, disable=not TQDM_AVAILABLE)
             for stem, batch_data in prescan_iterator:
-                try:
+                 try:
                     # Simulate the planning part synchronously for counting
                     if not batch_data.get('video'): continue
                     media_info = MediaInfo(original_path=batch_data['video'])
                     media_info.guess_info = self.renamer.parse_filename(media_info.original_path) # Sync
                     media_info.file_type = self.renamer._determine_file_type(media_info.guess_info) # Sync
                     # Pre-scan does NOT fetch metadata
-                    plan = self.renamer.plan_rename(batch_data['video'], batch_data['associated'], media_info) # Sync plan
+                    plan = self.renamer.plan_rename(batch_data['video'], batch_data.get('associated', []), media_info) # Sync plan
                     if plan.status == 'success':
                          action_count = len(plan.actions) + (1 if plan.created_dir_path else 0)
                          potential_actions_count += action_count
-                except Exception as e:
-                    log.warning(f"Pre-scan planning error for batch '{stem}': {e}", exc_info=True) # Add exc_info
+                 except Exception as e:
+                    log.warning(f"Pre-scan planning error for batch '{stem}': {e}", exc_info=True)
 
             if not self._confirm_live_run(potential_actions_count):
                 return
 
-        # 3. Asynchronous Metadata Fetching Stage
+        # 3. Asynchronous Metadata Fetching Stage - uses file_batches dict
         metadata_results = {} # Store results: {stem: MediaInfo or None}
         fetch_tasks = []
-        if self.args.use_metadata and self.metadata_fetcher: # Check fetcher exists
+        if use_metadata_effective and self.metadata_fetcher: # Check fetcher exists
              log.info(f"Creating {batch_count} tasks for concurrent metadata fetching...")
-             for stem, batch_data in file_batches.items():
+             for stem, batch_data in file_batches.items(): # Iterate over dict
                  task = asyncio.create_task(_fetch_metadata_for_batch(stem, batch_data, self), name=f"fetch_{stem}")
                  fetch_tasks.append(task)
 
              print("Fetching metadata...") # Simple indicator before loop starts
              completed_tasks = []
-             # Use the selected tqdm_async wrapper with asyncio.as_completed
+             # Use the selected async progress bar wrapper
              # Disable progress if interactive mode is on to avoid clutter
              disable_progress = self.args.interactive or not TQDM_AVAILABLE
              try:
@@ -289,12 +306,14 @@ class MainProcessor:
                      unit="batch",
                      disable=disable_progress
                  ):
-                     completed_tasks.append(await task_result_future) # Wait for future and append result
+                     # Append the actual result from the completed future
+                     completed_tasks.append(await task_result_future)
              except Exception as e_progress:
                   log.error(f"Error during async progress iteration: {e_progress}")
                   # Fallback: gather remaining tasks if progress iteration failed
                   if not completed_tasks: # Only gather if we didn't get any results yet
                        log.warning("Falling back to asyncio.gather due to progress error.")
+                       # Gather ensures all tasks are awaited, returns results or exceptions
                        completed_tasks = await asyncio.gather(*fetch_tasks, return_exceptions=True)
 
 
@@ -312,9 +331,9 @@ class MainProcessor:
                  else:
                      log.error(f"Unexpected result type from metadata fetch task: {type(result)}")
         else:
-            log.info("Metadata fetching disabled or fetcher not available, proceeding without online metadata.")
-            # Populate results with basic MediaInfo (no metadata)
-            for stem, batch_data in file_batches.items():
+             log.info("Metadata fetching disabled or fetcher not available, proceeding without online metadata.")
+             # Populate results with basic MediaInfo (no metadata)
+             for stem, batch_data in file_batches.items():
                  if not batch_data.get('video'):
                       metadata_results[stem] = None
                       continue
@@ -327,12 +346,13 @@ class MainProcessor:
                       log.error(f"Error during basic parsing for batch '{stem}' (metadata disabled): {e_parse}")
                       metadata_results[stem] = None # Mark as failed
 
-        # 4. Planning and Execution Stage (Synchronous Loop)
+
+        # 4. Planning and Execution Stage (Synchronous Loop) - uses file_batches dict
         run_batch_id = f"run-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:8]}"
         log.info(f"Starting planning and execution run ID: {run_batch_id}")
         results_summary = {'success': 0, 'skipped': 0, 'error': 0, 'actions': 0}
 
-        # Use standard tqdm for this synchronous loop
+        # Use standard tqdm for this synchronous loop over the dict
         process_iterator = tqdm(file_batches.items(), desc="Planning/Executing", unit="batch", total=batch_count, disable=not TQDM_AVAILABLE or self.args.interactive)
         print("-" * 30) # Separator before detailed output
 
@@ -373,7 +393,7 @@ class MainProcessor:
                 )
 
                 # b. Interactive Confirmation (per batch) - Sync
-                if self.args.interactive and not self.args.dry_run and plan.status == 'success':
+                if self.args.interactive and is_live_run and plan.status == 'success': # Check live status here too
                     print(f"\n--- Batch: {video_file_path.name} ---")
                     if plan.created_dir_path: print(f"  Plan: create_dir '{plan.created_dir_path}'")
                     for action in plan.actions: print(f"  Plan: {action.action_type} '{action.original_path.name}' -> '{action.new_path}'")
@@ -387,23 +407,18 @@ class MainProcessor:
                 # c. Execute Plan (if not skipped/failed) - Sync
                 action_result = {'success': False, 'message': plan.message, 'actions_taken': 0}
                 if plan.status == 'success' and user_choice == 'y':
-                    if self.args.dry_run:
-                         # Dry run simulation
-                         action_result['success'] = True
-                         dry_run_msgs = []
-                         if plan.created_dir_path: dry_run_msgs.append(f"DRY RUN: Would create dir '{plan.created_dir_path}'")
-                         dry_run_msgs.extend([f"DRY RUN: Would {a.action_type} '{a.original_path.name}' -> '{a.new_path}'" for a in plan.actions])
-                         action_result['message'] = "\n".join(dry_run_msgs)
-                         action_result['actions_taken'] = len(plan.actions) + (1 if plan.created_dir_path else 0)
-                    else:
-                        # Call the synchronous file operation function
-                        action_result = perform_file_actions(
-                            plan=plan,
-                            run_batch_id=run_batch_id,
-                            args_ns=self.args,
-                            cfg_helper=self.cfg,
-                            undo_manager=self.undo_manager
-                        )
+                    # Pass the effective live run status to perform_file_actions
+                    effective_args = self.args # Make a copy or modify directly if safe
+                    effective_args.live = is_live_run # Ensure live status is correct
+                    effective_args.dry_run = not is_live_run # Ensure dry_run is inverse
+
+                    action_result = perform_file_actions(
+                        plan=plan,
+                        run_batch_id=run_batch_id,
+                        args_ns=effective_args, # Pass potentially modified args
+                        cfg_helper=self.cfg,
+                        undo_manager=self.undo_manager
+                    )
                 elif plan.status == 'skipped':
                      action_result['success'] = False # Skipped is not success
                      action_result['message'] = plan.message or f"Skipped batch {stem}."
@@ -415,6 +430,7 @@ class MainProcessor:
                 # d. Update Summary & Print Result
                 if action_result.get('success', False):
                      results_summary['success'] += 1
+                     # Use actions_taken from result dict (works for dry and live)
                      results_summary['actions'] += action_result.get('actions_taken', 0)
                 elif plan and plan.status == 'skipped':
                      results_summary['skipped'] += 1
@@ -426,10 +442,10 @@ class MainProcessor:
                      print(action_result['message'])
                 elif plan is None: # Should not happen if checks above work, but safety
                       print(f"ERROR: Could not process batch for stem '{stem}' - Plan object is None.")
-                      results_summary['error'] += 1
+                      results_summary['error'] += 1 # Count as error
 
 
-                if not self.args.interactive and not self.args.dry_run and action_result.get('success'):
+                if not self.args.interactive and is_live_run and action_result.get('success'):
                      print("---") # Separator between successful live actions
 
             # Exception Handling for the batch loop
@@ -453,30 +469,36 @@ class MainProcessor:
         print(f"  Batches Successfully Processed: {results_summary['success']}")
         print(f"  Batches Skipped: {results_summary['skipped']}")
         print(f"  Batches with Errors: {results_summary['error']}")
-        if not self.args.dry_run: print(f"  Total File Actions Taken: {results_summary['actions']}")
+        # Base total actions taken on the summary dict, which is updated for both live and dry runs
+        total_actions_reported = results_summary['actions']
+        if is_live_run:
+             print(f"  Total File Actions Taken: {total_actions_reported}")
+        else: # Dry Run
+             if total_actions_reported > 0:
+                 print(f"  Total File Actions Planned: {total_actions_reported}")
+
         print("-" * 30)
-        if self.args.dry_run and results_summary['actions'] > 0: # Use actions_taken from dry run simulation
+        if not is_live_run and total_actions_reported > 0:
             print("DRY RUN COMPLETE. To apply changes, run again with --live")
-        elif self.args.dry_run:
+        elif not is_live_run:
             print("DRY RUN COMPLETE. No actions were planned.")
 
-        if not self.args.dry_run and self.cfg('enable_undo', False) and results_summary['actions'] > 0:
+        if is_live_run and self.cfg('enable_undo', False) and total_actions_reported > 0:
             script_name = Path(sys.argv[0]).name
             print(f"Undo information logged with Run ID: {run_batch_id}")
             print(f"To undo this run: {script_name} undo {run_batch_id}")
-        if not self.args.dry_run and self.args.stage_dir and results_summary['actions'] > 0:
+        if is_live_run and self.args.stage_dir and total_actions_reported > 0:
              print(f"Renamed files moved to staging: {self.args.stage_dir}")
         if results_summary['error'] > 0:
             print(f"WARNING: {results_summary['error']} errors occurred. Check logs.")
 
-        # Consider a batch successful only if actions were taken or it was skipped correctly
-        # Error count takes precedence
+        # Final status message
         if results_summary['error'] == 0:
             if results_summary['success'] > 0 or results_summary['skipped'] == batch_count:
                 print("Operation finished successfully.")
             elif results_summary['skipped'] < batch_count and results_summary['success'] == 0 :
                  print("Operation finished, but some batches were skipped or had no actions planned.")
-            else: # Should cover all cases now
+            else: # Should cover all cases now (e.g., skipped == count)
                  print("Operation finished.")
         else:
              print("Operation finished with errors.")

@@ -62,6 +62,8 @@ class BaseProfileSettings(BaseModel):
     cache_enabled: Optional[bool] = None
     cache_directory: Optional[str] = None
     cache_expire_seconds: Optional[int] = Field(None, ge=0)
+    scan_strategy: Optional[str] = Field(default='memory') # 'memory' or 'low_memory'
+    extract_stream_info: Optional[bool] = Field (default=False) # Default to False
     # Add any other profile-specific keys here
     # --- START ADDED FIELDS ---
     api_year_tolerance: Optional[int] = Field(default=1, ge=0) # Default to 1 year tolerance
@@ -96,6 +98,22 @@ class BaseProfileSettings(BaseModel):
         return v.lower() if v else 'first' # Return lowercase or default
     # --- END ADDED VALIDATOR ---
 
+    # Add validator for scan_strategy
+    @field_validator('scan_strategy', mode='before')
+    @classmethod
+    def check_scan_strategy(cls, v):
+        if v is not None and v.lower() not in ['memory', 'low_memory']:
+            raise ValueError("scan_strategy must be 'memory' or 'low_memory'")
+        return v.lower() if v else 'memory' # Default to memory
+
+    # Example validator for new field (add constraints if needed)
+    @field_validator('extract_stream_info', mode='before')
+    @classmethod
+    def check_extract_stream_info(cls, v):
+        # Just checks type for now
+        if v is not None and not isinstance(v, bool):
+            raise ValueError("extract_stream_info must be a boolean (true/false)")
+        return v
 
 class DefaultSettings(BaseProfileSettings):
     # Add fields that are *only* expected or required in [default]
