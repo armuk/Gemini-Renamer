@@ -23,15 +23,14 @@ class UndoManager:
         self.db_path = None
         self.is_enabled = False
         self.check_integrity = False
-        self.hash_check_bytes = 0 # Default to disabled
+        self.hash_check_bytes = 0
 
         try:
             self.is_enabled = self.cfg('enable_undo', False)
             if self.is_enabled:
                 self.db_path = self._resolve_db_path()
-                self._init_db()
+                self._init_db() # Initialize DB on creation
                 self.check_integrity = self.cfg('undo_check_integrity', False)
-                # Get hash check config value
                 try:
                     hash_bytes_cfg = self.cfg('undo_integrity_hash_bytes', 0)
                     self.hash_check_bytes = int(hash_bytes_cfg) if hash_bytes_cfg else 0
@@ -43,10 +42,8 @@ class UndoManager:
                     self.hash_check_bytes = 0
 
                 log_msg = f"UndoManager initialized (DB: {self.db_path}, Integrity: {self.check_integrity}"
-                if self.check_integrity and self.hash_check_bytes > 0:
-                    log_msg += f", Hash Check: {self.hash_check_bytes} bytes)"
-                else:
-                    log_msg += ")"
+                if self.check_integrity and self.hash_check_bytes > 0: log_msg += f", Hash Check: {self.hash_check_bytes} bytes)"
+                else: log_msg += ")"
                 log.info(log_msg)
             else:
                 log.info("Undo feature disabled by configuration.")
@@ -58,20 +55,15 @@ class UndoManager:
         # (Function unchanged)
         db_path_config = self.cfg('undo_db_path', None)
         try:
-            if db_path_config:
-                path = Path(db_path_config).resolve()
-            else:
-                path = Path(__file__).parent.parent / "rename_log.db"
-                path = path.resolve()
+            if db_path_config: path = Path(db_path_config).resolve()
+            else: path = Path(__file__).parent.parent / "rename_log.db"; path = path.resolve()
             path.parent.mkdir(parents=True, exist_ok=True)
             return path
-        except Exception as e:
-            raise RenamerError(f"Cannot resolve undo database path: {e}") from e
+        except Exception as e: raise RenamerError(f"Cannot resolve undo database path: {e}") from e
 
     def _connect(self):
         # (Function unchanged)
-        if not self.db_path:
-            raise RenamerError("Cannot connect to undo database: path not resolved.")
+        if not self.db_path: raise RenamerError("Cannot connect to undo database: path not resolved.")
         try:
             conn = sqlite3.connect(self.db_path, timeout=10.0)
             conn.row_factory = sqlite3.Row
@@ -80,34 +72,44 @@ class UndoManager:
             try: conn.execute("PRAGMA busy_timeout=5000;")
             except sqlite3.Error as pe: log.warning(f"Could not set PRAGMA busy_timeout=5000 for undo DB ({self.db_path}): {pe}")
             return conn
-        except sqlite3.Error as e:
-            raise RenamerError(f"Cannot connect to undo database '{self.db_path}': {e}") from e
+        except sqlite3.Error as e: raise RenamerError(f"Cannot connect to undo database '{self.db_path}': {e}") from e
 
     def _init_db(self):
-        # (Function unchanged)
         try:
             with self._connect() as conn:
+                # --- FIX 1: Modify UNIQUE constraint ---
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS rename_log (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         batch_id TEXT NOT NULL,
                         timestamp TEXT NOT NULL,
-                        original_path TEXT NOT NULL UNIQUE,
+                        original_path TEXT NOT NULL,
                         new_path TEXT NOT NULL,
                         type TEXT CHECK(type IN ('file', 'dir')) NOT NULL,
                         status TEXT CHECK(status IN ('renamed', 'moved', 'trashed', 'reverted', 'created_dir', 'pending_final', 'failed_pending')) NOT NULL,
                         original_size INTEGER,
                         original_mtime REAL,
-                        original_hash TEXT NULL
+                        original_hash TEXT NULL,
+                        UNIQUE(batch_id, original_path) -- Make the combination unique
                     )
                 """)
+                # Add hash column separately for backward compatibility if needed (though risky with schema change)
+                # It's generally better to handle schema upgrades more explicitly if needed in production.
+                # For now, let's assume we start fresh or the ALTER TABLE runs only if needed.
                 try:
-                    conn.execute("ALTER TABLE rename_log ADD COLUMN original_hash TEXT NULL;")
-                    log.info("Added 'original_hash' column to undo log table.")
-                except sqlite3.OperationalError as e:
-                    if "duplicate column name" in str(e).lower(): pass
-                    else: raise
+                    # Check if column exists before trying to add
+                    cursor = conn.execute("PRAGMA table_info(rename_log)")
+                    columns = [row['name'] for row in cursor.fetchall()]
+                    if 'original_hash' not in columns:
+                        conn.execute("ALTER TABLE rename_log ADD COLUMN original_hash TEXT NULL;")
+                        log.info("Added 'original_hash' column to undo log table.")
+                except sqlite3.Error as e_alter:
+                     log.error(f"Error altering table to add original_hash: {e_alter}")
+                     # Decide if this should raise an error or just log
+
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_batch_id ON rename_log(batch_id)")
+                # Optional: Index on original_path might be useful too if querying by it often outside batch context
+                # conn.execute("CREATE INDEX IF NOT EXISTS idx_original_path ON rename_log(original_path)")
                 conn.commit()
         except sqlite3.Error as e: raise RenamerError(f"Failed to initialize undo database schema: {e}") from e
         except RenamerError as e: raise RenamerError(f"Failed to connect during undo database initialization: {e}") from e
@@ -123,34 +125,55 @@ class UndoManager:
         except OSError as e: log.warning(f"Cannot calculate hash for '{file_path}': {e}"); return None
         except Exception as e: log.exception(f"Unexpected error calculating hash for '{file_path}': {e}"); return None
 
+# In class UndoManager:
+
     def log_action(self, batch_id, original_path, new_path, item_type, status):
-        # (Function unchanged)
         if not self.is_enabled: return False
-        orig_p = Path(original_path); original_size, original_mtime, original_hash = None, None, None
+        orig_p = Path(original_path)
+        original_size, original_mtime, original_hash = None, None, None
         can_stat = item_type == 'file' and status in {'pending_final', 'renamed', 'moved', 'trashed'}
+
         if can_stat:
+            # (Stat logic unchanged)
             try:
                 if orig_p.is_file():
                     stat = orig_p.stat(); original_size = stat.st_size; original_mtime = stat.st_mtime
                     if self.hash_check_bytes > 0: original_hash = self._calculate_partial_hash(orig_p, self.hash_check_bytes)
             except OSError as e: log.warning(f"Could not stat original file during log_action for '{original_path}': {e}")
             except Exception as e: log.exception(f"Unexpected error getting stats/hash for '{original_path}' during log_action: {e}")
+
         try:
             with self._connect() as conn:
-                conn.execute("INSERT INTO rename_log (batch_id, timestamp, original_path, new_path, type, status, original_size, original_mtime, original_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (batch_id, datetime.now(timezone.utc).isoformat(), str(original_path), str(new_path), item_type, status, original_size, original_mtime, original_hash))
-                conn.commit(); return True
-        except sqlite3.IntegrityError as e: log.warning(f"Duplicate entry prevented in rename log for '{original_path}' (batch '{batch_id}'): {e}"); return False
-        except sqlite3.Error as e: log.error(f"Database error during log_action for '{original_path}' (batch '{batch_id}'): {e}"); return False
-        except Exception as e: log.exception(f"Unexpected error logging undo action for '{original_path}' (batch '{batch_id}'): {e}"); return False
-
+                # --- FIX 2: Revert to simple INSERT ---
+                # The UNIQUE(batch_id, original_path) constraint handles duplicates within the same run
+                cursor = conn.execute(
+                    "INSERT INTO rename_log (batch_id, timestamp, original_path, new_path, type, status, original_size, original_mtime, original_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (batch_id, datetime.now(timezone.utc).isoformat(), str(original_path), str(new_path), item_type, status, original_size, original_mtime, original_hash)
+                )
+                conn.commit()
+                log.debug(f"Logged action for '{original_path}' (batch '{batch_id}') with status '{status}'.")
+                return True
+        except sqlite3.IntegrityError as e:
+             # This will now catch violations of UNIQUE(batch_id, original_path)
+             log.error(f"Duplicate action prevented in rename log for '{original_path}' (batch '{batch_id}'): {e}. This might indicate a planning error.")
+             # Return False as the action wasn't logged successfully this time
+             return False
+        except sqlite3.Error as e:
+            log.error(f"Database error during log_action for '{original_path}' (batch '{batch_id}'): {e}")
+            return False
+        except Exception as e:
+            log.exception(f"Unexpected error logging undo action for '{original_path}' (batch '{batch_id}'): {e}")
+            return False
+        
     def update_action_status(self, batch_id, original_path, new_status, conn: Optional[sqlite3.Connection] = None):
-        # (Function unchanged)
+        # (Function unchanged - the WHERE clause correctly targets the unique row)
         if not self.is_enabled: return False
         log.debug(f"Updating status to '{new_status}' for '{original_path}' in batch '{batch_id}'")
         manage_connection = conn is None; _conn = None
         try:
             if manage_connection: _conn = self._connect(); cursor = _conn.cursor()
             else: _conn = conn; cursor = _conn.cursor()
+            # WHERE clause should find the unique row for this batch_id and original_path
             cursor.execute("UPDATE rename_log SET status = ? WHERE batch_id = ? AND original_path = ? AND status != 'reverted'", (new_status, batch_id, str(original_path)))
             updated_count = cursor.rowcount
             if manage_connection: _conn.commit()

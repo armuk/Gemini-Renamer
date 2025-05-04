@@ -1,3 +1,5 @@
+# --- START OF FILE utils.py ---
+
 # rename_app/utils.py
 
 import re
@@ -6,93 +8,49 @@ from pathlib import Path
 from functools import lru_cache
 import logging # Keep logging import for module-level logger
 from collections import defaultdict
-from typing import List, Tuple, Optional, Set, Dict, Any
+# --- Add Iterator and Groupby for potential alternative ---
+from typing import List, Tuple, Optional, Set, Dict, Any, Iterator
+from itertools import groupby
+# --- End Add ---
+
 
 # --- TQDM Import ---
 try: from tqdm import tqdm; TQDM_AVAILABLE = True
-except ImportError: TQDM_AVAILABLE = False; 
+except ImportError: TQDM_AVAILABLE = False;
 def tqdm(iterable, *args, **kwargs): yield from iterable
 
 # --- Other Imports ---
 try: import langcodes; LANGCODES_AVAILABLE = True
-except ImportError: LANGCODES_AVAILABLE = False # Removed log warning here, handle later
+except ImportError: LANGCODES_AVAILABLE = False
 try: import chardet; CHARDET_AVAILABLE = True
-except ImportError: CHARDET_AVAILABLE = False # Removed log warning here
+except ImportError: CHARDET_AVAILABLE = False
 try: from guessit import guessit; GUESSIT_AVAILABLE = True
-except ImportError: GUESSIT_AVAILABLE = False # Removed log warning here
+except ImportError: GUESSIT_AVAILABLE = False
 
 log = logging.getLogger(__name__) # Define logger for the module
 
 # --- Filename Utils ---
-
-# ADD THIS FUNCTION
+# (sanitize_os_chars, sanitize_filename, extract_scene_tags, detect_encoding, parse_subtitle_language, _get_base_stem - unchanged)
 def sanitize_os_chars(name: str) -> str:
     """Removes only OS-prohibited characters, leaves spaces/dots/etc."""
-    # Basic sanitation: remove common invalid chars for Windows/Mac/Linux
-    # Replace with underscore
     sanitized = re.sub(r'[<>:"/\\|?*]', '_', name)
-    # Maybe collapse multiple underscores resulting from this specific replacement?
-    # sanitized = re.sub(r'_+', '_', sanitized) # Optional: Decided against for now
-    # Avoid completely empty names if ONLY invalid chars were passed
     return sanitized if sanitized else "_invalid_char_removal_"
-# --- END ADDED FUNCTION ---
 
 def sanitize_filename(filename: str) -> str:
-    """
-    Cleans a filename by removing/replacing invalid characters and handling edge cases.
-    """
-    # 1. Handle empty input immediately
-    if not filename or filename.isspace():
-        return "_invalid_name_"
-
-    # 2. Store if original started with a dot (for hidden files)
+    """Cleans a filename by removing/replacing invalid characters and handling edge cases."""
+    if not filename or filename.isspace(): return "_invalid_name_"
     starts_with_dot = filename.startswith('.')
-
-    # 3. Replace invalid characters AND whitespace with a single underscore
     sanitized = re.sub(r'[<>:"/\\|?*\s]+', '_', filename)
-
-    # 4. Collapse multiple underscores
     sanitized = re.sub(r'_+', '_', sanitized)
-
-    # 5. Check intermediate edge cases *after* collapsing
-    if not sanitized: return "_invalid_name_" # Check if empty after initial cleaning
+    if not sanitized: return "_invalid_name_"
     if all(c == '.' for c in sanitized): return "_invalid_dots_"
-    # If it consists only of underscores AFTER collapsing, return specific marker
-    # --- Remove log reference from previous attempt ---
-    # if all(c == '_' for c in sanitized): log.warning(...); return "_invalid_underscores_"
     if all(c == '_' for c in sanitized): return "_invalid_underscores_"
-
-    # 6. Strip TRAILING underscores and dots repeatedly FIRST
-    while sanitized and sanitized[-1] in '._':
-        sanitized = sanitized[:-1]
-
-    # 7. Strip LEADING underscores *only if not starting with preserved dot*
-    #    And only if result would not become empty (i.e., has more than one char)
-    if len(sanitized) > 1 and not starts_with_dot and sanitized.startswith('_'):
-        sanitized = sanitized.lstrip('_')
-
-    # 8. Final check for empty name after all stripping (e.g., if input was just '.')
-    if not sanitized:
-        # --- Remove log reference from previous attempt ---
-        # log.warning(f"Filename '{filename}' sanitized to empty string.")
-        return "_invalid_name_"
-
-    # 9. Restore leading dot if necessary and if not already present
-    if starts_with_dot and not sanitized.startswith('.'):
-         sanitized = "." + sanitized
-
-    # 10. Final check to ensure it doesn't end up as just "." or ".."
-    if sanitized in ['.', '..']:
-         # --- Remove log reference from previous attempt ---
-         # log.warning(f"Filename '{filename}' sanitized to invalid dot-name '{sanitized}'.")
-         return "_invalid_dots_" # Or perhaps _invalid_name_
-
+    while sanitized and sanitized[-1] in '._': sanitized = sanitized[:-1]
+    if len(sanitized) > 1 and not starts_with_dot and sanitized.startswith('_'): sanitized = sanitized.lstrip('_')
+    if not sanitized: return "_invalid_name_"
+    if starts_with_dot and not sanitized.startswith('.'): sanitized = "." + sanitized
+    if sanitized in ['.', '..']: return "_invalid_dots_"
     return sanitized
-
-
-# --- Rest of utils.py ---
-# (extract_scene_tags, detect_encoding, parse_subtitle_language, _get_base_stem, scan_media_files - unchanged)
-# ... (Keep all other functions as they were in the last correct version) ...
 
 @lru_cache(maxsize=128)
 def extract_scene_tags(filename: str, tags_to_match: Tuple[str, ...]) -> Tuple[List[str], str]:
@@ -199,36 +157,123 @@ def _get_base_stem(file_path: Path, assoc_extensions: set) -> str:
         else: log.debug(f"Suffix stripping resulted in empty base for '{name}', using original stem '{original_stem}'")
         return original_stem
 
+
+# --- START ENHANCEMENT: Added Memory Usage Comments ---
 def scan_media_files(target_dir: Path, cfg_helper):
+    """
+    Scans the target directory for media files and groups them by base stem.
+
+    Args:
+        target_dir: The directory Path object to scan.
+        cfg_helper: The ConfigHelper instance for accessing settings.
+
+    Returns:
+        A dictionary where keys are base stems and values are dictionaries
+        containing 'video' (Path or None) and 'associated' (List[Path]).
+
+    Memory Usage Considerations:
+        - This function uses Path.glob() or Path.rglob(), which are generators and
+          efficient for iterating over directory contents without loading all
+          filenames into memory at once.
+        - However, it then collects all *relevant* file paths (matching video
+          or associated extensions) into the `all_files_by_base_stem`
+          defaultdict before final processing.
+        - For directories with a very large number of relevant files (e.g.,
+          millions), the memory usage of this dictionary could become significant.
+        - For such extreme cases, a more memory-efficient (but potentially slower
+          and more complex) approach would involve:
+            1. Iterating once to write `(base_stem, file_path)` pairs to a
+               temporary file.
+            2. Sorting the temporary file externally (or in chunks).
+            3. Iterating through the sorted file, grouping by stem using
+               `itertools.groupby`, and yielding batches one by one.
+        - The current implementation is generally efficient and simpler for
+          typical use cases.
+    """
     log.info(f"Scanning directory: {target_dir} (Grouping by calculated base stem)")
-    file_groups = defaultdict(lambda: {"video": None, "associated": []}); skipped_stems = set()
-    allowed_video_ext = set(cfg_helper.get_list('video_extensions', default_value=[])); allowed_assoc_ext = set(cfg_helper.get_list('associated_extensions', default_value=[]))
-    is_recursive = cfg_helper('recursive', False);
-    if not allowed_video_ext: log.warning("No video extensions configured.")
-    glob_pattern = '**/*' if is_recursive else '*'
-    try: base_path = target_dir.resolve(); items_generator = base_path.rglob('*') if is_recursive else base_path.glob('*'); iterator = tqdm(items_generator, desc="Scanning", unit="item", disable=not TQDM_AVAILABLE) if TQDM_AVAILABLE else items_generator
-    except Exception as e: log.error(f"Error listing files in '{target_dir}': {e}"); return {}
+
+    # Using defaultdict is efficient for building the groups
     all_files_by_base_stem = defaultdict(list)
+    skipped_stems = set() # Tracks stems skipped due to ambiguity
+
+    # Get configuration settings
+    allowed_video_ext = set(cfg_helper.get_list('video_extensions', default_value=[]));
+    allowed_assoc_ext = set(cfg_helper.get_list('associated_extensions', default_value=[]))
+    all_allowed_ext = allowed_video_ext.union(allowed_assoc_ext) # Combine for initial check
+    is_recursive = cfg_helper('recursive', False);
+
+    if not allowed_video_ext:
+        log.warning("No video extensions configured.")
+        # Continue scanning for associated files potentially, but won't form batches
+
+    # Prepare generator for directory walking
+    try:
+        base_path = target_dir.resolve()
+        if not base_path.is_dir(): # Check if target_dir is valid after resolve
+            log.error(f"Target path is not a valid directory: {base_path}")
+            return {}
+        items_generator = base_path.rglob('*') if is_recursive else base_path.glob('*')
+        # Wrap with tqdm if available
+        iterator = tqdm(items_generator, desc="Scanning", unit="item", disable=not TQDM_AVAILABLE) if TQDM_AVAILABLE else items_generator
+    except Exception as e:
+        log.error(f"Error listing files in '{target_dir}': {e}")
+        return {}
+
+    # --- First Pass: Iterate and group by calculated stem ---
+    # This pass uses generators for listing files, but collects paths in memory dict.
     for item_path in iterator:
+        item_ext = item_path.suffix.lower()
+        # Skip if not a relevant extension or is a hidden file/dir
+        if not item_ext or item_ext not in all_allowed_ext or item_path.name.startswith('.'):
+            continue
         try:
-            if not item_path.exists() or not item_path.is_file(): continue
-        except OSError as e: log.warning(f"Cannot access item {item_path}: {e}"); continue
-        if item_path.name.startswith('.'): continue
-        base_stem = _get_base_stem(item_path, allowed_assoc_ext); log.debug(f"Scan found: '{item_path.name}' -> Base Stem: '{base_stem}'"); all_files_by_base_stem[base_stem].append(item_path)
+            # Ensure it's a file before proceeding
+            if not item_path.is_file():
+                continue
+        except OSError as e:
+            log.warning(f"Cannot access item {item_path}: {e}")
+            continue
+
+        # Calculate the base stem (grouping key)
+        base_stem = _get_base_stem(item_path, all_allowed_ext); # Use all extensions for stemming
+        log.debug(f"Scan found: '{item_path.name}' -> Base Stem: '{base_stem}'")
+        all_files_by_base_stem[base_stem].append(item_path)
+
+    # --- Second Pass: Process grouped stems into final batches ---
     log.debug(f"Processing {len(all_files_by_base_stem)} unique base stems found.")
+    file_groups = defaultdict(lambda: {"video": None, "associated": []})
     for base_stem, file_list in all_files_by_base_stem.items():
-        if base_stem in skipped_stems: continue
+        if base_stem in skipped_stems: continue # Skip if already marked ambiguous
         video_file = None; associated_files = []
         for file_path in file_list:
             ext = file_path.suffix.lower()
             if ext in allowed_video_ext:
-                if video_file is not None: log.warning(f"Ambiguous: Multiple videos match base stem '{base_stem}'. Skipping."); video_file = None; skipped_stems.add(base_stem); break
+                if video_file is not None:
+                     # Ambiguity detected: more than one video file for this stem
+                     log.warning(f"Ambiguous: Multiple videos match base stem '{base_stem}'. Found '{file_path.name}' and '{video_file.name}'. Skipping this stem.")
+                     # Mark stem as skipped and break inner loop
+                     skipped_stems.add(base_stem)
+                     video_file = None # Ensure no batch is created
+                     break
                 video_file = file_path
-            elif ext in allowed_assoc_ext: associated_files.append(file_path)
+            elif ext in allowed_assoc_ext:
+                # Only add if it's not the same as the potential video file
+                # (though _get_base_stem should usually differentiate)
+                associated_files.append(file_path)
+            # Files with other extensions are already skipped
+
+        # Check again if skipped due to ambiguity before adding to file_groups
         if video_file and base_stem not in skipped_stems:
-            final_associated = [f for f in associated_files if f != video_file]; file_groups[base_stem]['video'] = video_file; file_groups[base_stem]['associated'] = final_associated
+            # Filter associated_files to remove the video file itself if it somehow got added
+            final_associated = [f for f in associated_files if f.resolve() != video_file.resolve()]
+            file_groups[base_stem]['video'] = video_file
+            file_groups[base_stem]['associated'] = final_associated
             log.debug(f"Confirmed batch for base stem '{base_stem}' with Video='{video_file.name}', Associated={[f.name for f in final_associated]}")
-        # Removed discard log
+
+    # Final result dictionary excludes skipped stems
     valid_batches = { s: d for s, d in file_groups.items() if s not in skipped_stems and d.get('video') is not None }
     log.debug(f"Scan finished. Found {len(valid_batches)} valid batches.")
     return valid_batches
+# --- END ENHANCEMENT ---
+
+# --- END OF FILE utils.py ---
