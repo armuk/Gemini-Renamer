@@ -1,34 +1,31 @@
+--- requirements.txt
+
 # requirements.txt
 
 # Core Application Dependencies
+aiohttp>=3.9.0         # Asynchronous HTTP client (though we use executor for sync libs)
 guessit>=3.9.0         # For parsing filenames (check latest stable version)
 python-dotenv>=1.0.0   # For loading .env files (API keys)
-pytomlpp>=1.0.13        # Fast TOML parser for config.toml
-requests>=2.31.0       # For metadata fetching (used by TMDB/TVDB libs)
-tenacity>=8.2.0        # For retry logic on API calls
-langcodes>=3.3.0       # For standardizing language codes
-chardet>=5.0.0         # For subtitle encoding detection
+pytomlpp>=1.0.13       # Fast TOML parser for config.toml
 Send2Trash>=1.8.0      # For moving files to trash (cross-platform)
+diskcache>=5.6.3       # For caching (optional, but recommended for performance)
+pydantic>=2.0.0        # For data validation (if using Pydantic models)
+async_lru>=2.0.0       # For LRU caching async functions (if needed, manual cache used here)
+platformdirs>=4.2.0    # For cross-platform directory management
 
 # Metadata Provider Libraries (Choose based on what's actually used)
-tmdbv3api>=1.8.1       # TheMovieDB API v3 wrapper
-# tvdb-api             # TheTVDB API wrapper (Pin to specific working version, e.g., tvdb-api==X.Y.Z, v4 might require auth)
-# python-dateutil      # Often needed by API libs for date parsing (install if needed)
-
-# Optional Dependencies (User Experience)
-tqdm>=4.65.0           # Progress bars
 rich>=13.0.0           # Enhanced terminal output (e.g., tables)
 
 # Optional Dependencies (Accuracy/Performance)
-requests-cache>=1.0.0  # Caching HTTP requests
+# requests-cache>=1.0.0  # Not used directly if using diskcache/manual
 thefuzz>=0.19.0        # Fuzzy string matching
 python-Levenshtein>=0.20.0 # Optional, speeds up thefuzz
 
-# Testing Dependencies
 pytest>=8.0.0
 pytest-mock>=3.10.0
 # pytest-asyncio       # Only if you implement asyncio features later
-# aiohttp              # Only if you implement asyncio features later
+# ADD pytest-asyncio for testing these changes
+pytest-asyncio>=0.21.0
 # aiosqlite            # Only if you implement asyncio features later
 # aiofiles             # Only if you implement asyncio features later
 # pyfakefs             # Optional, for advanced filesystem mocking

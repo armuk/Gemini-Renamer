@@ -2,6 +2,7 @@
 
 import logging
 import sys
+import tvdb_v4_official
 from tmdbv3api import TMDb
 
 # --- TVDB v4 Import ---

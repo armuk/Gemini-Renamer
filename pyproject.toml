@@ -22,3 +22,8 @@ skip_covered = true      # Optional: Don't list 100% covered files in terminal
 
 [tool.coverage.html]
 directory = "coverage_html_report" # Optional: change output directory name
+
+[tool.poetry.dependencies]
+# ... other dependencies
+diskcache = "^5.6.3"
+platformdirs = "^4.2.0"
