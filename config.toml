@@ -8,6 +8,7 @@ recursive = false
 processing_mode = "auto"
 on_conflict = "skip" # skip, overwrite, suffix, fail
 api_rate_limit_delay = 0.5 # seconds between API calls
+# Enable extraction (can also use --use-stream-info flag)
 extract_stream_info = true
 # --- Formats ---
 series_format = "{show_title} - S{season:0>2}E{episode:0>2} - {episode_title}{ext}"
@@ -25,6 +26,16 @@ associated_extensions = [".srt", ".sub", ".ssa", ".ass", ".vtt", ".nfo", ".jpg",
 # Example profile overriding some defaults
 series_format = "{show_title} - S{season:0>2}E{episode:0>2} - {episode_title} [{quality} {audio_codec}]{ext}" # Assuming guessit provides these
 movie_format = "{movie_title} ({movie_year}) [{quality}]{ext}"
+
+# Example formats using stream information based placeholders
+movie_format = "{movie_title} ({movie_year}) [{resolution} {vcodec} {acodec} {achannels}]"
+series_format = "{show_title} - S{season:0>2}E{episode:0>2} - {episode_title} [{resolution} {vcodec}]"
+
+# Example using collection in folder format
+folder_format_movie = "Movies/{collection}/{movie_title} ({movie_year})"
+folder_format_series = "TV Shows/{show_title}/Season {season:0>2}"
+
+# Other settings...
 create_folders = true
 on_conflict = "suffix"
 
