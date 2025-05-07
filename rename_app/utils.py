@@ -342,8 +342,10 @@ def _scan_media_files_memory(target_dir: Path, is_recursive: bool, all_allowed_e
     # --- First Pass: Group by stem in memory ---
     file_count = 0
     for item_path in iterator:
+        log.debug(f"Scanner considering item: {item_path} (Exists: {item_path.exists()}, Is File: {item_path.is_file() if item_path.exists() else 'N/A'})") # ADD THIS
         item_ext = item_path.suffix.lower()
         if not item_ext or item_ext not in all_allowed_ext or item_path.name.startswith('.'):
+            log.debug(f"  -> Skipping {item_path.name} due to ext '{item_ext}' (allowed: {all_allowed_ext}) or dotfile.") # ADD THIS
             continue
         try:
             if not item_path.is_file(): continue
