@@ -4,23 +4,27 @@ log_file = "renamer.log"
 log_level = "INFO"
 enable_undo = true
 use_metadata = true
-recursive = false
+recursive = true
 processing_mode = "auto"
 on_conflict = "skip" # skip, overwrite, suffix, fail
 api_rate_limit_delay = 0.5 # seconds between API calls
 # Enable extraction (can also use --use-stream-info flag)
 extract_stream_info = true
 # --- Formats ---
-series_format = "{show_title} - S{season:0>2}E{episode:0>2} - {episode_title}{ext}"
+series_format = "S{season:0>2}E{episode:0>2}{ext}"
 movie_format = "{movie_title} ({movie_year}){ext}"
 subtitle_format = "{stem}.{lang_code}{flags_dot}{ext}" # Placeholders: stem, lang_code, flags_dot (like .forced), ext
 # --- Folder Structure (Optional) ---
-create_folders = false
+create_folders = true
 folder_format_series = "{show_title} ({show_year})/Season {season:0>2}"
 folder_format_movie = "{movie_title} ({movie_year})"
 # --- Extensions ---
 video_extensions = [".mkv", ".mp4", ".avi", ".mov", ".wmv"]
 associated_extensions = [".srt", ".sub", ".ssa", ".ass", ".vtt", ".nfo", ".jpg", ".png"]
+# --- Unknown File Handing ---
+unknown_file_handling = "move_to_unknown"  # or "guessit_only" or "skip"
+unknown_files_dir = "_unknown_files_"
+
 
 [profile.plex_optimized]
 # Example profile overriding some defaults
@@ -28,8 +32,8 @@ series_format = "{show_title} - S{season:0>2}E{episode:0>2} - {episode_title} [{
 movie_format = "{movie_title} ({movie_year}) [{quality}]{ext}"
 
 # Example formats using stream information based placeholders
-movie_format = "{movie_title} ({movie_year}) [{resolution} {vcodec} {acodec} {achannels}]"
-series_format = "{show_title} - S{season:0>2}E{episode:0>2} - {episode_title} [{resolution} {vcodec}]"
+#movie_format = "{movie_title} ({movie_year}) [{resolution} {vcodec} {acodec} {achannels}]{ext}"
+#series_format = "{show_title} - S{season:0>2}E{episode:0>2} - {episode_title} [{resolution} {vcodec}]{ext}"
 
 # Example using collection in folder format
 folder_format_movie = "Movies/{collection}/{movie_title} ({movie_year})"
@@ -38,6 +42,8 @@ folder_format_series = "TV Shows/{show_title}/Season {season:0>2}"
 # Other settings...
 create_folders = true
 on_conflict = "suffix"
+unknown_file_handling = "move_to_unknown"  # or "guessit_only" or "skip"
+unknown_files_dir = "_unknown_files_"
 
 [profile.simple_tv]
 processing_mode = "series"

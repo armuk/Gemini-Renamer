@@ -65,3 +65,6 @@ class MediaInfo:
      # Combine relevant fields after processing for easier access
      file_type: str = 'unknown' # series, movie, unknown
      data: Dict[str, Any] = field(default_factory=dict) # Merged data for formatting
+     # --- NEW FIELD ---
+     metadata_error_message: Optional[str] = None # To store specific API error messages
+     # --- END NEW FIELD ---
