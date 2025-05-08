@@ -78,6 +78,7 @@ class BaseProfileSettings(BaseModel):
     undo_expire_days: Optional[int] = Field(None, ge=-1)
     undo_check_integrity: Optional[bool] = None
     undo_integrity_hash_bytes: Optional[int] = Field(None, ge=0)
+    undo_integrity_hash_full: Optional[bool] = Field(default=False, description="Calculate full file hash for undo integrity check (SLOW, overrides hash_bytes).")
 
     # Logging Options
     log_file: Optional[str] = None
@@ -127,15 +128,19 @@ class BaseProfileSettings(BaseModel):
             raise ValueError("unknown_file_handling must be one of 'skip', 'guessit_only', 'move_to_unknown'")
         return v.lower() if v else 'skip'
 
-    # --- NEW Validator for preserve_mtime ---
     @field_validator('preserve_mtime', mode='before')
     @classmethod
     def check_preserve_mtime(cls, v):
         if v is not None and not isinstance(v, bool):
             raise ValueError("preserve_mtime must be a boolean (true/false)")
         return v
-    # --- END NEW ---
 
+    @field_validator('undo_integrity_hash_full', mode='before')
+    @classmethod
+    def check_undo_integrity_hash_full(cls, v):
+        if v is not None and not isinstance(v, bool):
+            raise ValueError("undo_integrity_hash_full must be a boolean (true/false)")
+        return v
 
 class DefaultSettings(BaseProfileSettings):
     pass
@@ -246,16 +251,18 @@ class ConfigManager:
 
     def get_value(self, key, profile='default', command_line_value=None, default_value=None):
         if command_line_value is not None:
+            # Update the set of boolean optional keys
             bool_optional_keys = {
                 'recursive', 'use_metadata', 'create_folders', 'enable_undo',
                 'scene_tags_in_filename', 'subtitle_encoding_detection',
-                'extract_stream_info', 'preserve_mtime' # Added preserve_mtime
+                'extract_stream_info', 'preserve_mtime',
+                'undo_integrity_hash_full' # <-- ADDED
             }
             if key in bool_optional_keys and command_line_value is None:
-                pass
+                 pass # Don't return None for BooleanOptionalAction if it wasn't specified
             else:
                  return command_line_value
-
+        # ... rest of get_value remains the same ...
         if key == 'tmdb_language' and self._api_keys.get('tmdb_language'):
              return self._api_keys['tmdb_language']
 
@@ -271,7 +278,6 @@ class ConfigManager:
              if val is not None:
                  return val
 
-        # --- FIX: Use the default specified in the Pydantic model if available ---
         model_default = None
         if profile == 'default' and hasattr(DefaultSettings, 'model_fields') and key in DefaultSettings.model_fields:
             model_default = DefaultSettings.model_fields[key].default
@@ -280,7 +286,6 @@ class ConfigManager:
 
         if model_default is not None:
              return model_default
-        # --- END FIX ---
 
         return default_value
 
