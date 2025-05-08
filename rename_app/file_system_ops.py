@@ -8,7 +8,7 @@ import argparse
 import sys
 import os # Keep os import for os.rename and os.utime
 import time # Import time for mtime comparison/setting if needed
-from typing import Dict, Callable, Set, Optional, Any
+from typing import Dict, Callable, Set, Optional, Any, List, Tuple
 
 # RICH Imports
 import builtins
@@ -34,7 +34,7 @@ except ImportError:
         def plain(self): return self.text # Add plain property fallback
 # --- End RICH Imports ---
 
-from .models import RenamePlan, RenameAction
+from .models import RenamePlan, RenameAction, MediaMetadata, MediaInfo
 from .exceptions import FileOperationError, RenamerError
 from .undo_manager import UndoManager # Import for type hint
 
@@ -46,6 +46,37 @@ TEMP_SUFFIX_PREFIX = ".renametmp_"
 WINDOWS_PATH_LENGTH_WARNING_THRESHOLD = 240
 # Define MTIME_TOLERANCE if used for comparisons (might not be needed here)
 # MTIME_TOLERANCE = 1.0
+
+def _compare_and_format(
+    field_name: str,
+    guess_value: Optional[Any],
+    final_value: Optional[Any],
+    is_numeric: bool = False
+) -> Optional[Text]:
+    """Compares guess vs final value and returns formatted Text if different."""
+    # Normalize empty strings/None for comparison
+    g_val = str(guess_value) if guess_value is not None else ""
+    f_val = str(final_value) if final_value is not None else ""
+
+    # Special handling for numeric comparison (treat None/empty string as unequal to 0)
+    if is_numeric:
+        try:
+            g_num = int(g_val) if g_val else None
+            f_num = int(f_val) if f_val else None
+            if g_num == f_num:
+                return None # Numeric values are the same
+        except (ValueError, TypeError):
+            pass # Fall back to string comparison if conversion fails
+
+    # String comparison after potential numeric check
+    if g_val != f_val:
+        return Text.assemble(
+            Text(f"{field_name}: ", style="dim blue"),
+            Text(f"'{g_val or '<unset>'}'", style="dim red"),
+            Text(" -> ", style="dim blue"),
+            Text(f"'{f_val or '<unset>'}'", style="dim green")
+        )
+    return None
 
 def _handle_conflict(original_path: Path, target_path: Path, conflict_mode: str) -> Path:
     # (Function unchanged)
@@ -70,54 +101,204 @@ def _handle_conflict(original_path: Path, target_path: Path, conflict_mode: str)
 UndoLogCallable = Callable[[str, Path, Path, str, str], None]
 
 # --- MODIFIED: Added run_batch_id argument ---
-def perform_file_actions(plan: RenamePlan, args_ns: argparse.Namespace, cfg_helper, undo_manager: UndoManager, run_batch_id: str) -> Dict[str, Any]:
+def perform_file_actions(
+    plan: RenamePlan,
+    args_ns: argparse.Namespace,
+    cfg_helper,
+    undo_manager: UndoManager,
+    run_batch_id: str,
+    media_info: Optional[MediaInfo] = None # Add MediaInfo object
+) -> Dict[str, Any]:
     results = {'success': True, 'message': "", 'actions_taken': 0}
     action_messages = []
-    # --- MODIFIED: Use run_batch_id argument instead of plan.batch_id for logging ---
-    # batch_id = plan.batch_id # Get batch_id from the plan - No longer needed for logging
-
     conflict_mode = cfg_helper('on_conflict', 'skip')
-    should_preserve_mtime = cfg_helper('preserve_mtime', False) # Get setting
+    should_preserve_mtime = cfg_helper('preserve_mtime', False)
     console = Console()
 
     # --- Dry Run ---
     if not getattr(args_ns, 'live', False):
-        log.info(f"--- DRY RUN for Run ID: {run_batch_id} (Plan ID: {plan.batch_id}) ---") # Log both IDs for clarity
-        dry_run_actions = []; original_paths_in_plan_dry = {a.original_path.resolve() for a in plan.actions}; current_targets_dry: Set[Path] = set(); dry_run_conflict_error = False
-        if plan.created_dir_path and not plan.created_dir_path.exists(): dry_run_actions.append({"original": Text("-", style="dim"), "arrow": Text("->", style="dim"), "new": Text(str(plan.created_dir_path), style="green"), "action": Text("Create Dir", style="bold green"), "status": Text("OK", style="green")})
-        elif plan.created_dir_path: dry_run_actions.append({"original": Text("-", style="dim"), "arrow": Text("->", style="dim"), "new": Text(str(plan.created_dir_path), style="yellow"), "action": Text("Create Dir", style="bold yellow"), "status": Text("Exists", style="yellow")})
+        log.info(f"--- DRY RUN for Run ID: {run_batch_id} (Plan ID: {plan.batch_id}) ---")
+        dry_run_actions = []
+        original_paths_in_plan_dry = {a.original_path.resolve() for a in plan.actions}
+        current_targets_dry: Set[Path] = set()
+        dry_run_conflict_error = False
+
+        # --- Prepare data for comparison (only needed in dry run) ---
+        original_guess: Dict[str, Any] = {}
+        final_metadata: Optional[MediaMetadata] = None
+        final_file_type: str = 'unknown'
+        if media_info: # Check if media_info was provided
+             original_guess = media_info.guess_info if media_info.guess_info else {}
+             final_metadata = media_info.metadata
+             final_file_type = media_info.file_type
+        # --- End data preparation ---
+
+        # --- Create Dir Action ---
+        reason_text_dir = Text("") # Placeholder
+        if plan.created_dir_path:
+             status_text_dir = Text("OK", style="green")
+             action_text_dir = Text("Create Dir", style="bold green")
+             new_path_text_dir = Text(str(plan.created_dir_path), style="green")
+             if plan.created_dir_path.exists():
+                 status_text_dir = Text("Exists", style="yellow")
+                 action_text_dir = Text("Create Dir", style="bold yellow")
+                 new_path_text_dir = Text(str(plan.created_dir_path), style="yellow")
+             dry_run_actions.append({
+                 "original": Text("-", style="dim"),
+                 "arrow": Text("->", style="dim"),
+                 "new": new_path_text_dir,
+                 "action": action_text_dir,
+                 "status": status_text_dir,
+                 "reason": reason_text_dir # Add reason column
+             })
+
+        # --- File Actions ---
         for action in plan.actions:
-            simulated_final_target = action.new_path.resolve(); target_exists_externally = (simulated_final_target.exists() and simulated_final_target not in original_paths_in_plan_dry) or simulated_final_target in current_targets_dry
-            status_text = Text("OK", style="green"); action_text = Text(action.action_type.capitalize(), style="blue"); new_path_text = Text(str(action.new_path))
-            if sys.platform == 'win32' and len(str(simulated_final_target)) > WINDOWS_PATH_LENGTH_WARNING_THRESHOLD: status_text = Text(f"Long Path (> {WINDOWS_PATH_LENGTH_WARNING_THRESHOLD})", style="bold yellow")
+            simulated_final_target = action.new_path.resolve()
+            target_exists_externally = (simulated_final_target.exists() and simulated_final_target not in original_paths_in_plan_dry) or simulated_final_target in current_targets_dry
+
+            status_text = Text("OK", style="green")
+            action_text = Text(action.action_type.capitalize(), style="blue")
+            new_path_text = Text(str(action.new_path))
+            reason_details: List[Text] = []
+
+            # Check for long path
+            if sys.platform == 'win32' and len(str(simulated_final_target)) > WINDOWS_PATH_LENGTH_WARNING_THRESHOLD:
+                 status_text = Text(f"Long Path (> {WINDOWS_PATH_LENGTH_WARNING_THRESHOLD})", style="bold yellow")
+
+            # Check for conflicts
             if target_exists_externally:
                 try:
-                    temp_conflict_mode = conflict_mode if conflict_mode != 'fail' else 'skip'; resolved_target_dry_sim = _handle_conflict(action.original_path, simulated_final_target, temp_conflict_mode)
-                    if resolved_target_dry_sim != simulated_final_target: status_text = Text(f"Conflict: Suffix -> '{resolved_target_dry_sim.name}'", style="yellow"); new_path_text = Text(str(resolved_target_dry_sim), style="yellow")
-                    elif conflict_mode == 'skip': status_text = Text("Conflict: Skip", style="bold yellow"); action_text = Text("Skip", style="bold yellow"); new_path_text = Text(str(action.new_path), style="dim yellow")
-                    elif conflict_mode == 'overwrite': status_text = Text("Conflict: Overwrite", style="bold yellow"); new_path_text = Text(str(action.new_path), style="yellow")
-                    simulated_final_target = resolved_target_dry_sim
-                except FileOperationError as e_dry_skip: status_text = Text(f"Conflict: Skip ({e_dry_skip})", style="bold yellow"); action_text = Text("Skip", style="bold yellow"); new_path_text = Text(str(action.new_path), style="dim yellow"); simulated_final_target = None
-                except FileExistsError as e_dry_fail: status_text = Text(f"Conflict: Fail ({e_dry_fail})", style="bold red"); action_text = Text("Fail", style="bold red"); new_path_text = Text(str(action.new_path), style="dim red"); simulated_final_target = None; dry_run_conflict_error = True
-                except Exception as e_dry: status_text = Text(f"Error ({e_dry})", style="bold red"); simulated_final_target = None; dry_run_conflict_error = True
+                    # Simulate conflict resolution, but don't actually fail the dry run on 'fail' mode
+                    temp_conflict_mode = conflict_mode if conflict_mode != 'fail' else 'skip'
+                    resolved_target_dry_sim = _handle_conflict(action.original_path, simulated_final_target, temp_conflict_mode)
+
+                    if resolved_target_dry_sim != simulated_final_target:
+                        status_text = Text(f"Conflict: Suffix -> '{resolved_target_dry_sim.name}'", style="yellow")
+                        new_path_text = Text(str(resolved_target_dry_sim), style="yellow")
+                    elif conflict_mode == 'skip':
+                        status_text = Text("Conflict: Skip", style="bold yellow")
+                        action_text = Text("Skip", style="bold yellow")
+                        new_path_text = Text(str(action.new_path), style="dim yellow")
+                    elif conflict_mode == 'overwrite':
+                        status_text = Text("Conflict: Overwrite", style="bold yellow")
+                        new_path_text = Text(str(action.new_path), style="yellow")
+                    # Add a note if 'fail' mode would have been triggered
+                    elif conflict_mode == 'fail':
+                         status_text = Text("Conflict: Would Fail", style="bold red")
+                         action_text = Text("Fail", style="bold red")
+                         new_path_text = Text(str(action.new_path), style="dim red")
+                         dry_run_conflict_error = True # Flag potential failure
+
+                    simulated_final_target = resolved_target_dry_sim # Use the potentially resolved target
+
+                except FileOperationError as e_dry_skip:
+                    status_text = Text(f"Conflict: Skip ({e_dry_skip})", style="bold yellow")
+                    action_text = Text("Skip", style="bold yellow")
+                    new_path_text = Text(str(action.new_path), style="dim yellow")
+                    simulated_final_target = None # Cannot proceed
+                except Exception as e_dry: # Catch other potential errors during _handle_conflict simulation
+                    status_text = Text(f"Conflict Error ({e_dry})", style="bold red")
+                    action_text = Text("Fail", style="bold red")
+                    new_path_text = Text(str(action.new_path), style="dim red")
+                    simulated_final_target = None
+                    dry_run_conflict_error = True
+
+            # Check for internal collisions (multiple sources mapping to the same final target)
             if simulated_final_target:
-                 if simulated_final_target in current_targets_dry: status_text = Text("Conflict: Target Collision", style="bold red"); action_text = Text("Fail", style="bold red"); new_path_text = Text(str(action.new_path), style="dim red"); dry_run_conflict_error=True
-                 else: current_targets_dry.add(simulated_final_target)
-            # --- Add preserve mtime info to dry run ---
+                if simulated_final_target in current_targets_dry:
+                    status_text = Text("Conflict: Target Collision", style="bold red")
+                    action_text = Text("Fail", style="bold red")
+                    new_path_text = Text(str(action.new_path), style="dim red")
+                    dry_run_conflict_error = True
+                else:
+                    current_targets_dry.add(simulated_final_target)
+
+            # --- Generate Reason Details (Only for the main video file action) ---
+            # We assume associated files change *because* the video file changed.
+            if media_info and action.original_path.resolve() == media_info.original_path.resolve():
+                g_title = original_guess.get('title', '')
+                g_year = original_guess.get('year')
+                g_season = original_guess.get('season')
+                # Handle guess episode (can be list or int)
+                g_ep_raw = original_guess.get('episode')
+                g_ep = g_ep_raw[0] if isinstance(g_ep_raw, list) and g_ep_raw else g_ep_raw
+
+                f_title, f_year, f_season, f_ep = None, None, None, None
+                if final_metadata:
+                    if final_file_type == 'movie':
+                        f_title = final_metadata.movie_title
+                        f_year = final_metadata.movie_year
+                    elif final_file_type == 'series':
+                        f_title = final_metadata.show_title
+                        f_year = final_metadata.show_year
+                        f_season = final_metadata.season
+                        f_ep = final_metadata.episode_list[0] if final_metadata.episode_list else None
+                # Fallback to guess if no metadata
+                f_title = f_title if f_title is not None else g_title
+                f_year = f_year if f_year is not None else g_year
+                f_season = f_season if f_season is not None else g_season
+                f_ep = f_ep if f_ep is not None else g_ep
+
+                reason_details.append(_compare_and_format("Title", g_title, f_title))
+                reason_details.append(_compare_and_format("Year", g_year, f_year, is_numeric=True))
+                if final_file_type == 'series':
+                     reason_details.append(_compare_and_format("Season", g_season, f_season, is_numeric=True))
+                     reason_details.append(_compare_and_format("Episode", g_ep, f_ep, is_numeric=True))
+
+                # Check folder change
+                if action.new_path.parent.resolve() != action.original_path.parent.resolve():
+                     reason_details.append(Text("Folder Change", style="dim blue"))
+
+            elif not media_info: # Handle case where media_info wasn't passed
+                 reason_details.append(Text("Reason N/A (internal error)", style="yellow"))
+            else: # For associated files
+                 reason_details.append(Text("(matches video)", style="dim"))
+
+            # Filter out None reasons and join with newlines
+            reason_text = Text("\n").join(filter(None, reason_details))
+
+            # Preserve mtime info
             preserve_mtime_info = ""
             if should_preserve_mtime and action.action_type in ['rename', 'move']:
                  preserve_mtime_info = Text(" (mtime preserved)", style="italic dim")
-            # --- End ---
-            dry_run_actions.append({"original": Text(str(action.original_path.name)), "arrow": Text("->", style="dim" if action_text.plain != "Fail" else "red"), "new": Text.assemble(new_path_text, preserve_mtime_info), "action": action_text, "status": status_text}) # Modified to add info
+
+            dry_run_actions.append({
+                "original": Text(str(action.original_path.name)),
+                "arrow": Text("->", style="dim" if action_text.plain != "Fail" else "red"),
+                "new": Text.assemble(new_path_text, preserve_mtime_info),
+                "action": action_text,
+                "status": status_text,
+                "reason": reason_text # Add the generated reason text
+            })
 
         if dry_run_actions:
-            # Use the plan's unique ID for the dry run table title for differentiation
-            table = Table(title=f"Dry Run Plan - Batch ID (approx): {plan.batch_id[:15]}", show_header=True, header_style="bold magenta")
-            table.add_column("Original Name", style="dim cyan", no_wrap=True, min_width=20); table.add_column(" ", justify="center", width=2); table.add_column("New Path / Name", style="cyan", no_wrap=True, min_width=30); table.add_column("Action", justify="center"); table.add_column("Status / Conflict", justify="left", min_width=15)
-            for item in dry_run_actions: table.add_row(item["original"], item["arrow"], item["new"], item["action"], item["status"])
-            console.print(table); results['message'] = f"Dry Run plan displayed above ({len(dry_run_actions)} potential actions)."
-        else: results['message'] = "DRY RUN: No actions planned."; console.print(results['message'])
+            table = Table(
+                title=f"Dry Run Plan - Batch ID (approx): {plan.batch_id[:15]}",
+                show_header=True, header_style="bold magenta"
+            )
+            table.add_column("Original Name", style="dim cyan", no_wrap=False, min_width=20)
+            table.add_column(" ", justify="center", width=2)
+            table.add_column("New Path / Name", style="cyan", no_wrap=False, min_width=30)
+            table.add_column("Action", justify="center")
+            table.add_column("Status / Conflict", justify="left", min_width=15)
+            # --- ADD REASON COLUMN ---
+            table.add_column("Reason / Changes", justify="left", min_width=20)
+
+            for item in dry_run_actions:
+                table.add_row(
+                    item["original"], item["arrow"], item["new"],
+                    item["action"], item["status"], item["reason"] # Add reason data
+                )
+            console.print(table)
+            results['message'] = f"Dry Run plan displayed above ({len(dry_run_actions)} potential actions)."
+        else:
+            results['message'] = "DRY RUN: No actions planned."
+            console.print(results['message'])
+
         results['success'] = not dry_run_conflict_error
+        # Store planned actions count for summary, even if there were conflicts
+        results['actions_taken'] = len([a for a in dry_run_actions if a["action"].plain not in ["Skip", "Fail"]])
         return results
 
     # --- Live Run ---
@@ -301,72 +482,67 @@ def perform_file_actions(plan: RenamePlan, args_ns: argparse.Namespace, cfg_help
             log.debug(f"Starting Phase 2: Rename temporary paths to final for run {run_batch_id}")
             phase2_errors = False; action_count_phase2 = 0
             for temp_path, final_path in temp_to_final_map.items():
-                 original_path_for_log: Optional[Path] = None;
-                 for orig_res, temp in original_to_temp_map.items():
-                     if temp.resolve() == temp_path.resolve(): original_path_for_log = Path(orig_res); break
+                original_path_for_log: Optional[Path] = None
+                original_path_resolved: Optional[Path] = None # Store resolved path for mtime lookup
+                for orig_res, temp in original_to_temp_map.items():
+                    if temp.resolve() == temp_path.resolve():
+                        original_path_for_log = Path(orig_res)
+                        original_path_resolved = orig_res # Keep the resolved version
+                        break
 
-                 try:
-                     log.debug(f"Phase 2: Attempting move Temp '{temp_path}' -> Final '{final_path}'")
-                     if not temp_path.exists():
-                         log.error(f"P2 Error: Temp file {temp_path} not found! Cannot complete rename for '{original_path_for_log.name if original_path_for_log else 'UNKNOWN'}'.")
-                         phase2_errors = True;
-                         if original_path_for_log:
-                              # Mark as failed ONLY if temp file is missing before attempt
-                              # --- MODIFIED: Use run_batch_id ---
-                              undo_manager.update_action_status(batch_id=run_batch_id, original_path=str(original_path_for_log), new_status='failed_pending')
-                         continue # Critical error
-
-                     if final_path.exists() or final_path.is_symlink():
-                          if conflict_mode == 'overwrite': log.warning(f"P2 Overwriting existing target: {final_path}"); final_path.unlink(missing_ok=True)
-                          else: log.error(f"P2 Error: Target '{final_path}' exists unexpectedly! Conflict mode '{conflict_mode}' prevents overwrite."); phase2_errors = True; continue
-
-                     rename_successful = False
-                     try:
-                         os.rename(str(temp_path), str(final_path)); log.debug(f"  -> P2 Success (os.rename): '{temp_path.name}' -> '{final_path.name}'"); rename_successful = True
-                     except OSError as e_os_rename:
-                         log.warning(f"  -> P2 os.rename failed ({e_os_rename}), attempting shutil.move fallback...");
-                         try: shutil.move(str(temp_path), str(final_path)); log.debug(f"  -> P2 Success (shutil.move): '{temp_path.name}' -> '{final_path.name}'"); rename_successful = True
-                         except Exception as e_shutil: msg = f"P2 Error: Both os.rename and shutil.move failed for '{temp_path.name}' -> '{final_path.name}': {e_shutil}"; log.critical(msg, exc_info=True); action_messages.append(f"ERROR: {msg}"); phase2_errors = True
-                     except Exception as e_generic_rename: msg = f"P2 Error: Unexpected issue during os.rename for '{temp_path.name}' -> '{final_path.name}': {e_generic_rename}"; log.critical(msg, exc_info=True); action_messages.append(f"ERROR: {msg}"); phase2_errors = True
+                try:
+                    # ... (Error checking: temp_path exists, final_path doesn't exist or overwrite allowed) ...
+                    if not temp_path.exists(): # ... handle error ...
+                        continue
+                    if final_path.exists() or final_path.is_symlink(): # ... handle error or unlink ...
+                        continue
+                    rename_successful = False
+                    try:
+                        # ... (os.rename with shutil.move fallback) ...
+                        os.rename(str(temp_path), str(final_path)); log.debug(f"  -> P2 Success (os.rename): '{temp_path.name}' -> '{final_path.name}'"); rename_successful = True
+                    except OSError as e_os_rename:
+                        log.warning(f"  -> P2 os.rename failed ({e_os_rename}), attempting shutil.move fallback...");
+                        try: shutil.move(str(temp_path), str(final_path)); log.debug(f"  -> P2 Success (shutil.move): '{temp_path.name}' -> '{final_path.name}'"); rename_successful = True
+                        except Exception as e_shutil: msg = f"P2 Error: Both os.rename and shutil.move failed for '{temp_path.name}' -> '{final_path.name}': {e_shutil}"; log.critical(msg, exc_info=True); action_messages.append(f"ERROR: {msg}"); phase2_errors = True
+                    except Exception as e_generic_rename: msg = f"P2 Error: Unexpected issue during os.rename for '{temp_path.name}' -> '{final_path.name}': {e_generic_rename}"; log.critical(msg, exc_info=True); action_messages.append(f"ERROR: {msg}"); phase2_errors = True
 
                      # --- MOVED LOGIC INSIDE 'if rename_successful' ---
-                     if rename_successful:
-                         action_count_phase2 += 1
-                         if original_path_for_log:
-                              # Preserve mtime AFTER successful rename/move
-                              if should_preserve_mtime:
-                                  original_mtime = original_mtimes.get(original_path_for_log.resolve())
-                                  if original_mtime is not None:
-                                      try:
-                                          log.debug(f"  -> Preserving mtime ({original_mtime:.2f}) for '{final_path.name}'")
-                                          os.utime(str(final_path), (original_mtime, original_mtime))
-                                      except OSError as utime_err: log.warning(f"  -> Failed to preserve mtime for '{final_path.name}': {utime_err}")
-                                  else: log.debug(f"  -> Could not preserve mtime for '{final_path.name}': Original mtime not found.")
+                    if rename_successful:
+                        action_count_phase2 += 1
+                        if original_path_for_log and original_path_resolved: # Check we found the original path
+                            # Preserve mtime AFTER successful rename/move
+                            if should_preserve_mtime:
+                                original_mtime = original_mtimes.get(original_path_resolved) # Use RESOLVED path for lookup
+                                if original_mtime is not None:
+                                    try:
+                                        log.debug(f"  -> Preserving mtime ({original_mtime:.2f}) for '{final_path.name}'")
+                                        os.utime(str(final_path), (original_mtime, original_mtime))
+                                    except OSError as utime_err: log.warning(f"  -> Failed to preserve mtime for '{final_path.name}': {utime_err}")
+                                else: log.debug(f"  -> Could not preserve mtime for '{final_path.name}': Original mtime not found in map.")
 
-                              # Update undo status to success status
-                              final_status = 'moved' if final_path.parent.resolve() != original_path_for_log.parent.resolve() else 'renamed'
-                              # --- MODIFIED: Use run_batch_id ---
-                              if undo_manager.update_action_status(batch_id=run_batch_id, original_path=str(original_path_for_log), new_status=final_status):
-                                  action_messages.append(f"{final_status.upper()}D: '{original_path_for_log.name}' -> '{final_path}'")
-                                  results['actions_taken'] += 1
-                              else:
-                                  log.error(f"Could not update undo log status for '{original_path_for_log}' to '{final_status}'")
-                                  action_messages.append(f"ACTION UNLOGGED? '{original_path_for_log.name}' -> '{final_path}'")
-                         else: log.error(f"Internal error finding original path for '{temp_path}'."); action_messages.append(f"RENAMED (orig?): temp -> '{final_path.name}'")
+                            # Update undo status to success status
+                            final_status = 'moved' if final_path.parent.resolve() != original_path_for_log.parent.resolve() else 'renamed'
+                            if undo_manager.update_action_status(batch_id=run_batch_id, original_path=str(original_path_for_log), new_status=final_status):
+                                action_messages.append(f"{final_status.upper()}D: '{original_path_for_log.name}' -> '{final_path}'")
+                                results['actions_taken'] += 1
+                            else:
+                                log.error(f"Could not update undo log status for '{original_path_for_log}' to '{final_status}'")
+                                action_messages.append(f"ACTION UNLOGGED? '{original_path_for_log.name}' -> '{final_path}'")
+                        else: log.error(f"Internal error finding original path for '{temp_path}'."); action_messages.append(f"RENAMED (orig?): temp -> '{final_path.name}'")
                      # --- END MOVED LOGIC ---
                      # --- FIX: Mark as failed in undo log ONLY if rename FAILED ---
-                     elif original_path_for_log: # Check if rename failed and we have original path
-                         log.error(f"P2 Rename failed for '{original_path_for_log.name}'. Marking undo status as failed.")
-                         # --- MODIFIED: Use run_batch_id ---
-                         undo_manager.update_action_status(batch_id=run_batch_id, original_path=str(original_path_for_log), new_status='failed_pending')
-                     # --- END FIX ---
+                    elif original_path_for_log: # Check if rename failed and we have original path
+                        log.error(f"P2 Rename failed for '{original_path_for_log.name}'. Marking undo status as failed.")
+                        # --- MODIFIED: Use run_batch_id ---
+                        undo_manager.update_action_status(batch_id=run_batch_id, original_path=str(original_path_for_log), new_status='failed_pending')
+                    # --- END FIX ---
 
 
-                 except Exception as e_outer_p2:
-                     msg = f"P2 Outer Error processing temp '{temp_path.name}' to '{final_path.name}': {e_outer_p2}"; log.critical(msg, exc_info=True); action_messages.append(f"ERROR: {msg}"); phase2_errors = True
-                     # Mark as failed if an outer error occurred
-                     # --- MODIFIED: Use run_batch_id ---
-                     if original_path_for_log: undo_manager.update_action_status(batch_id=run_batch_id, original_path=str(original_path_for_log), new_status='failed_pending')
+                except Exception as e_outer_p2:
+                    msg = f"P2 Outer Error processing temp '{temp_path.name}' to '{final_path.name}': {e_outer_p2}"; log.critical(msg, exc_info=True); action_messages.append(f"ERROR: {msg}"); phase2_errors = True
+                    # Mark as failed if an outer error occurred
+                    # --- MODIFIED: Use run_batch_id ---
+                    if original_path_for_log: undo_manager.update_action_status(batch_id=run_batch_id, original_path=str(original_path_for_log), new_status='failed_pending')
 
             # Final checks (unchanged)
             if phase2_errors: action_messages.append("CRITICAL: Errors occurred during final rename phase."); results['success'] = False
