@@ -12,18 +12,24 @@ from typing import Tuple, Optional, Dict, Any, cast
 # Rich imports and fallbacks
 import builtins
 try:
-    from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TaskID
+    from rich.progress import (
+        Progress,
+        BarColumn,
+        TextColumn,
+        TimeElapsedColumn,
+        MofNCompleteColumn,
+        TaskID
+    )
     from rich.console import Console
     from rich.text import Text
-    # --- NEW IMPORTS for Interactive ---
     from rich.prompt import Prompt, Confirm, InvalidResponse
     from rich.panel import Panel
     from rich.table import Table
-    # --- END NEW IMPORTS ---
     RICH_AVAILABLE = True
 except ImportError:
     RICH_AVAILABLE = False
     TaskID = int
+    # Fallbacks (unchanged)
     class Progress:
         def __init__(self, *args, **kwargs): pass
         def __enter__(self): return self
@@ -35,7 +41,6 @@ except ImportError:
         def __init__(self, *args, **kwargs): pass
         def print(self, *args, **kwargs): builtins.print(*args, **kwargs)
         def input(self, *args, **kwargs) -> str: return builtins.input(*args, **kwargs)
-    # --- Minimal Fallbacks ---
     class Prompt:
         @staticmethod
         def ask(*args, **kwargs): return builtins.input(args[0])
@@ -56,6 +61,10 @@ except ImportError:
         @property
         def plain(self): return self.text # Add plain property for fallback checks
     class InvalidResponse(Exception): pass
+    class BarColumn: pass
+    class TextColumn: pass
+    class TimeElapsedColumn: pass
+    class MofNCompleteColumn: pass
     # --- End Fallbacks ---
 
 
@@ -64,19 +73,19 @@ from .renamer_engine import RenamerEngine
 from .file_system_ops import perform_file_actions, _handle_conflict, FileOperationError
 from .utils import scan_media_files
 from .exceptions import UserAbortError, RenamerError, MetadataError
-# --- Add RenamePlan ---
 from .models import MediaInfo, RenamePlan, MediaMetadata
 from .api_clients import get_tmdb_client, get_tvdb_client
 
 log = logging.getLogger(__name__)
 
-
-# --- REMOVE TQDM Imports ---
-# ... (AsyncTqdm class can remain or be removed if progress bars are sufficient) ...
-
-
-log = logging.getLogger(__name__)
-
+# Standard progress columns
+DEFAULT_PROGRESS_COLUMNS = (
+    TextColumn("[progress.description]{task.description}"),
+    BarColumn(),
+    MofNCompleteColumn(),
+    TimeElapsedColumn(),
+    TextColumn("[cyan]{task.fields[item_name]}"),
+)
 
 async def _fetch_metadata_for_batch(
     batch_stem: str,
@@ -84,19 +93,26 @@ async def _fetch_metadata_for_batch(
     processor: "MainProcessor",
     progress: Optional[Progress] = None,
     task_id: Optional[TaskID] = None
-) -> Tuple[str, MediaInfo]: # Returns MediaInfo
-    # (Function remains the same, ensures it returns MediaInfo)
+) -> Tuple[str, MediaInfo]:
+    # (Function logic remains the same as provided in previous step)
     video_path_for_media_info = batch_data.get('video')
     if not video_path_for_media_info:
         log.error(f"CRITICAL in _fetch_metadata_for_batch: video_path is None for stem '{batch_stem}'. Using dummy.")
-        # Create a dummy MediaInfo to return, marking it as an error state
         error_media_info = MediaInfo(original_path=Path(f"error_dummy_{batch_stem}.file"))
         error_media_info.file_type = 'unknown'
         error_media_info.metadata_error_message = "Missing video path for batch."
         return batch_stem, error_media_info
 
     media_info = MediaInfo(original_path=video_path_for_media_info)
-    media_info.metadata = None # Ensure it's initialized
+    media_info.metadata = None
+
+    item_name_short = media_info.original_path.name[:30] + ("..." if len(media_info.original_path.name) > 30 else "")
+    if progress and task_id is not None and progress.tasks:
+        if task_id < len(progress.tasks) and not progress.tasks[task_id].finished:
+            try:
+                progress.update(task_id, item_name=f"fetching: {item_name_short}")
+            except Exception as e_prog_update:
+                 log.error(f"Error updating progress bar item name in fetch: {e_prog_update}")
 
     try:
         media_info.guess_info = processor.renamer.parse_filename(media_info.original_path)
@@ -109,16 +125,8 @@ async def _fetch_metadata_for_batch(
             log.debug(f"Attempting async metadata fetch for '{batch_stem}' ({media_info.file_type})")
             year_guess = media_info.guess_info.get('year')
 
-            # Update progress description
-            if progress and task_id is not None and progress.tasks:
-                if task_id < len(progress.tasks): # Check task_id is still valid before accessing description
-                    current_description_obj = progress.tasks[task_id].description
-                    base_description = str(current_description_obj).split(" (")[0]
-                    new_description_str = f"{base_description} ({batch_stem[:20]}...)"
-                    progress.update(task_id, description=new_description_str)
-
             fetched_api_metadata: Optional[MediaMetadata] = None
-            try: # Specific try-block for the fetcher calls
+            try:
                 if media_info.file_type == 'series':
                     ep_list_guess = media_info.guess_info.get('episode_list', [media_info.guess_info.get('episode')])
                     valid_ep_list = [ep for ep in ep_list_guess if isinstance(ep, int) and ep > 0] if ep_list_guess else []
@@ -139,19 +147,18 @@ async def _fetch_metadata_for_batch(
                     else: guessed_title = media_info.original_path.stem; log.debug(f"Guessed title empty/invalid for movie '{batch_stem}', using stem: '{guessed_title}'")
                     fetched_api_metadata = await processor.metadata_fetcher.fetch_movie_metadata(movie_title_guess=guessed_title, year_guess=year_guess)
 
-                media_info.metadata = fetched_api_metadata # Assign whatever was fetched
+                media_info.metadata = fetched_api_metadata
 
-            except MetadataError as me: # Catch specific MetadataError from fetcher
+            except MetadataError as me:
                 log.error(f"Caught MetadataError for '{batch_stem}': {me}")
-                media_info.metadata_error_message = str(me) # Store the user-friendly message
-                media_info.metadata = None # Ensure metadata is None
-            except Exception as fetch_e: # Catch any other unexpected error during the await
+                media_info.metadata_error_message = str(me)
+                media_info.metadata = None
+            except Exception as fetch_e:
                 log.exception(f"Unexpected error during actual metadata API call for '{batch_stem}': {fetch_e}")
                 media_info.metadata_error_message = f"Unexpected fetch error: {fetch_e}"
                 media_info.metadata = None
 
             if media_info.metadata is None or not media_info.metadata.source_api:
-                 # If metadata_error_message isn't already set by a caught MetadataError, set a generic one.
                 if not media_info.metadata_error_message:
                     media_info.metadata_error_message = "Metadata fetch returned no usable API data."
                 log.warning(
@@ -159,11 +166,10 @@ async def _fetch_metadata_for_batch(
                     f"has an issue. Error: '{media_info.metadata_error_message}'. Metadata object: {media_info.metadata}"
                 )
 
-        return batch_stem, media_info # Return the MediaInfo object
+        return batch_stem, media_info
 
     except Exception as e:
         log.exception(f"Critical error in _fetch_metadata_for_batch for batch '{batch_stem}' (outer try): {e}")
-        # Ensure media_info is initialized even if guessit fails
         if not hasattr(media_info, 'guess_info') or not media_info.guess_info:
              media_info.guess_info = {}
         media_info.file_type = 'unknown'
@@ -172,8 +178,8 @@ async def _fetch_metadata_for_batch(
         return batch_stem, media_info
     finally:
         if progress and task_id is not None:
-            if progress.tasks and task_id < len(progress.tasks):
-                 progress.update(task_id, advance=1)
+            if progress.tasks and task_id < len(progress.tasks) and not progress.tasks[task_id].finished:
+                 progress.update(task_id, advance=1, item_name="")
 
 
 class MainProcessor:
@@ -181,26 +187,26 @@ class MainProcessor:
         self.args = args
         self.cfg = cfg_helper
         self.undo_manager = undo_manager
-        self.renamer = RenamerEngine(cfg_helper) # Instantiates RenamerEngine
-        self.metadata_fetcher = None             # Initialized based on args/cfg below
+        self.renamer = RenamerEngine(cfg_helper)
+        self.metadata_fetcher = None
 
         use_metadata_effective = getattr(args, 'use_metadata', False)
         if use_metadata_effective:
              log.info("Metadata fetching enabled by configuration/args for MainProcessor.")
-             # Ensure MetadataFetcher is instantiated only if needed
-             if get_tmdb_client() or get_tvdb_client(): # Check if clients are actually available
+             if get_tmdb_client() or get_tvdb_client():
                  self.metadata_fetcher = MetadataFetcher(cfg_helper)
              else:
                  log.warning("Metadata enabled but no API clients initialized. Disabling fetcher.")
-                 args.use_metadata = False # Override arg if clients failed
+                 setattr(self.args, 'use_metadata', False) # Ensure args reflects disabled state
+                 use_metadata_effective = False
         else:
              log.info("Metadata fetching disabled by configuration or command line for MainProcessor.")
 
-        self.console = Console() # Use rich console
+        self.console = Console()
 
-    # --- NEW HELPER: Display plan details ---
+    # ... (_display_plan_for_confirmation, _refetch_with_manual_id, _confirm_live_run, _handle_move_to_unknown remain the same) ...
     def _display_plan_for_confirmation(self, plan: RenamePlan, media_info: MediaInfo):
-        """Prints the proposed plan using rich formatting."""
+        # (Function unchanged)
         if not plan or plan.status != 'success':
             self.console.print(f"[yellow]No valid rename plan generated for {media_info.original_path.name}.[/yellow]")
             if plan and plan.message:
@@ -221,15 +227,12 @@ class MainProcessor:
             if media_info.metadata.is_series:
                 title = media_info.metadata.show_title or "[missing]"
                 year = f"({media_info.metadata.show_year})" if media_info.metadata.show_year else ""
-                # --- CORRECTED ACCESS ---
-                ep_list = media_info.metadata.episode_list # Get list from metadata object
-                ep_num = ep_list[0] if ep_list else 0      # Safely get first episode number
-                ep_title = media_info.metadata.episode_titles.get(ep_num, "[missing]") # Use ep_num
-                season_num = media_info.metadata.season if media_info.metadata.season is not None else 0 # Use metadata season
+                ep_list = media_info.metadata.episode_list
+                ep_num = ep_list[0] if ep_list else 0
+                ep_title = media_info.metadata.episode_titles.get(ep_num, "[missing]")
+                season_num = media_info.metadata.season if media_info.metadata.season is not None else 0
                 panel_content.append(f"[bold]Match:[/bold] {title} {year} - S{season_num:02d}E{ep_num:02d} - {ep_title}")
-                # --- END CORRECTION ---
             elif media_info.metadata.is_movie:
-                # ... (movie display logic - likely correct) ...
                 title = media_info.metadata.movie_title or "[missing]"
                 year = f"({media_info.metadata.movie_year})" if media_info.metadata.movie_year else ""
                 panel_content.append(f"[bold]Match:[/bold] {title} {year}")
@@ -245,24 +248,18 @@ class MainProcessor:
         table.add_column("New")
 
         if plan.created_dir_path:
-             # Ensure path separators are displayed correctly (might not be needed depending on OS)
              dir_path_str = str(plan.created_dir_path).replace("\\", "/")
              table.add_row("[dim]-[/dim]", "[dim]->[/dim]", f"[green]{dir_path_str}[/green] [i](Create Dir)[/i]")
         for action_item in plan.actions:
              action_style = "blue" if action_item.action_type == 'move' else "default"
-             # Ensure path separators are displayed correctly
              new_path_str = str(action_item.new_path).replace("\\", "/")
              table.add_row(f"{action_item.original_path.name}", f"[{action_style}]->[/]", f"[{action_style}]{new_path_str}[/]")
 
         panel_content.append(table)
         self.console.print(Panel("\n".join(str(c) for c in panel_content), title="[yellow]Confirm Batch Action", border_style="yellow"))
 
-    # --- NEW HELPER: Re-fetch metadata with manual ID ---
     async def _refetch_with_manual_id(self, media_info: MediaInfo, api_source: str, manual_id: int) -> Optional[MediaMetadata]:
-        """
-        Attempts to fetch metadata using a manually provided ID.
-        Returns updated MediaMetadata or None on failure.
-        """
+        # (Function unchanged)
         if not self.metadata_fetcher:
             self.console.print("[red]Error: Metadata fetcher not initialized.[/red]")
             return None
@@ -274,25 +271,15 @@ class MainProcessor:
         try:
             if api_source == 'tmdb':
                 if media_info.file_type == 'movie':
-                    # Directly call internal method - requires understanding its return format
-                    # We might need to adjust _do_fetch_tmdb_movie to accept an ID
-                    # Or add a new method like fetch_movie_by_id
-                    # For now, let's *simulate* by re-searching title (less ideal)
-                    # A better approach would be fetcher.fetch_movie_by_id(manual_id) if implemented
                     self.console.print(f"[yellow]Re-fetching TMDB movie details for ID {manual_id}...[/yellow]")
-                    # Placeholder: Ideally call a direct ID fetch method
-                    # movie_data, ids, score = await self.metadata_fetcher._do_fetch_tmdb_movie_by_id(manual_id, current_lang) # Hypothetical
-                    # Let's try calling the search and hope it finds the exact ID first
                     title_guess = media_info.guess_info.get('title', media_info.original_path.stem)
                     year_guess = media_info.guess_info.get('year')
                     new_metadata = await self.metadata_fetcher.fetch_movie_metadata(title_guess, year_guess) # Re-fetch normally for now
                     if not new_metadata or new_metadata.ids.get('tmdb_id') != manual_id:
                         log.warning(f"Re-fetch for TMDB ID {manual_id} didn't return the expected movie.")
-                        # Here you would ideally handle the direct ID fetch result
-                        new_metadata = None # Mark as failed if direct ID call was intended
+                        new_metadata = None
                 elif media_info.file_type == 'series':
                     self.console.print(f"[yellow]Re-fetching TMDB series details for ID {manual_id}...[/yellow]")
-                    # Placeholder: Ideally call a direct ID fetch method
                     title_guess = media_info.guess_info.get('title', media_info.original_path.stem)
                     season_guess = media_info.guess_info.get('season', 0)
                     ep_list_guess = media_info.guess_info.get('episode_list', [media_info.guess_info.get('episode')])
@@ -306,9 +293,6 @@ class MainProcessor:
             elif api_source == 'tvdb':
                  if media_info.file_type == 'series':
                     self.console.print(f"[yellow]Re-fetching TVDB series details for ID {manual_id}...[/yellow]")
-                    # TVDB fetcher might already support ID directly, or need internal call
-                    # show_data, ep_map, ids, score = await self.metadata_fetcher._do_fetch_tvdb_series(..., tvdb_id_arg=manual_id) # Example
-                    # Let's re-fetch normally for now
                     title_guess = media_info.guess_info.get('title', media_info.original_path.stem)
                     season_guess = media_info.guess_info.get('season', 0)
                     ep_list_guess = media_info.guess_info.get('episode_list', [media_info.guess_info.get('episode')])
@@ -317,7 +301,7 @@ class MainProcessor:
                     new_metadata = await self.metadata_fetcher.fetch_series_metadata(title_guess, season_guess, valid_ep_list, year_guess) # Fetches both, check if TVDB ID matches
                     if not new_metadata or new_metadata.ids.get('tvdb_id') != manual_id:
                          log.warning(f"Re-fetch using TVDB ID {manual_id} didn't result in metadata with that ID.")
-                         new_metadata = None # Mark as failed if TVDB was specifically requested and didn't match
+                         new_metadata = None
                  else:
                      self.console.print("[red]TVDB ID only applicable for Series.[/red]")
                      return None
@@ -337,9 +321,8 @@ class MainProcessor:
             self.console.print(f"[red]Error during re-fetch: {e}[/red]")
             return None
 
-
     def _confirm_live_run(self, potential_actions_count):
-        # (Unchanged - uses Rich Confirm)
+        # (Function unchanged)
         if potential_actions_count == 0:
             log.warning("Pre-scan found no files eligible for action based on current settings.")
             self.console.print("[yellow]Pre-scan found no files eligible for action based on current settings.[/yellow]")
@@ -355,7 +338,6 @@ class MainProcessor:
         else: self.console.print("Undo logging is [yellow]DISABLED[/yellow].")
         self.console.print("-" * 30)
         try:
-            # Use rich Confirm for y/n
             if Confirm.ask("Proceed with actions?", default=False):
                 log.info("User confirmed live run."); return True
             else:
@@ -370,7 +352,7 @@ class MainProcessor:
             return False
 
     def _handle_move_to_unknown(self, batch_stem: str, batch_data: Dict[str, Any], run_batch_id: str) -> Dict[str, Any]:
-        # (Unchanged)
+        # (Function unchanged)
         results = {'success': True, 'message': "", 'actions_taken': 0}; action_messages = []
         unknown_dir_str = self.args.unknown_files_dir
         if not unknown_dir_str:
@@ -423,7 +405,6 @@ class MainProcessor:
 
 
     async def run_processing(self):
-        # ... (initial setup, scanning, pre-scan, initial parse, metadata fetch remain the same) ...
         target_dir = self.args.directory.resolve()
         if not target_dir.is_dir():
             log.critical(f"Target directory not found or is not a directory: {target_dir}")
@@ -445,12 +426,7 @@ class MainProcessor:
 
         log.info("Collecting batches from scanner...")
         batch_generator = scan_media_files(target_dir, self.cfg)
-        file_batches_list = []
-        if batch_generator:
-            file_batches_list = list(batch_generator)
-
-        disable_rich_progress = self.args.interactive or not RICH_AVAILABLE
-
+        file_batches_list = list(batch_generator)
         file_batches = {stem: data for stem, data in file_batches_list}
         batch_count = len(file_batches)
         log.info(f"Collected {batch_count} batches.")
@@ -459,21 +435,17 @@ class MainProcessor:
              self.console.print("[yellow]No valid video files/batches found matching criteria.[/yellow]")
              return
 
+        disable_rich_progress = self.args.interactive or not RICH_AVAILABLE
+
         is_live_run = getattr(self.args, 'live', False)
         if is_live_run:
             log.info("Performing synchronous pre-scan for live run confirmation...")
             potential_actions_count = 0
-            # Use Rich progress bar for pre-scan
-            with Progress(TextColumn("[progress.description]{task.description} {task.fields[item_name]}"), BarColumn(), TextColumn("({task.completed} of {task.total})"), TimeElapsedColumn(), console=self.console, disable=disable_rich_progress) as progress:
+            with Progress(*DEFAULT_PROGRESS_COLUMNS, console=self.console, disable=disable_rich_progress) as progress:
                 prescan_task = progress.add_task("Pre-scan", total=batch_count, item_name="")
                 for stem, batch_data in file_batches.items():
-                    # Use shorter name for progress bar update
-                    item_name_short = Path(batch_data.get('video', stem)).name[:30]
-                    if len(item_name_short) < len(Path(batch_data.get('video', stem)).name):
-                        item_name_short += "..."
+                    item_name_short = Path(batch_data.get('video', stem)).name[:30] + ("..." if len(Path(batch_data.get('video', stem)).name) > 30 else "")
                     progress.update(prescan_task, advance=1, item_name=item_name_short)
-
-                    # Pre-scan logic (remains the same)
                     try:
                         if not batch_data.get('video'): continue
                         media_info_prescan = MediaInfo(original_path=batch_data['video'])
@@ -483,40 +455,37 @@ class MainProcessor:
                             unknown_handling_mode_prescan = self.cfg('unknown_file_handling', 'skip', arg_value=getattr(self.args, 'unknown_file_handling', None))
                             if unknown_handling_mode_prescan == 'move_to_unknown': potential_actions_count += 1 + len(batch_data.get('associated', []))
                             elif unknown_handling_mode_prescan == 'guessit_only':
-                                # Temporarily set metadata to None for planning
                                 media_info_prescan.metadata = None
                                 plan = self.renamer.plan_rename(batch_data['video'], batch_data.get('associated', []), media_info_prescan)
                                 if plan.status == 'success': potential_actions_count += len(plan.actions) + (1 if plan.created_dir_path else 0)
                         else:
-                            # Plan without API metadata for pre-scan estimate
                             media_info_prescan.metadata = None
                             plan = self.renamer.plan_rename(batch_data['video'], batch_data.get('associated', []), media_info_prescan)
                             if plan.status == 'success': potential_actions_count += len(plan.actions) + (1 if plan.created_dir_path else 0)
                     except Exception as e: log.warning(f"Pre-scan planning error for batch '{stem}': {e}", exc_info=True)
             if not self._confirm_live_run(potential_actions_count): return
 
-        initial_media_infos: Dict[str, Optional[MediaInfo]] = {} # Allow None for failed initial parse
+        initial_media_infos: Dict[str, Optional[MediaInfo]] = {}
         log.info("Performing initial file parsing...")
-        with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(), TextColumn("({task.completed} of {task.total})"), TimeElapsedColumn(), console=self.console, disable=disable_rich_progress) as progress:
-            parse_task = progress.add_task("Parsing Filenames", total=batch_count)
+        with Progress(*DEFAULT_PROGRESS_COLUMNS, console=self.console, disable=disable_rich_progress) as progress:
+            parse_task = progress.add_task("Parsing Filenames", total=batch_count, item_name="")
             for stem, batch_data in file_batches.items():
-                if not batch_data.get('video'): initial_media_infos[stem] = None; progress.update(parse_task, advance=1); continue
+                item_name_short = Path(batch_data.get('video', stem)).name[:30] + ("..." if len(Path(batch_data.get('video', stem)).name) > 30 else "")
+                progress.update(parse_task, advance=1, item_name=item_name_short)
+                if not batch_data.get('video'): initial_media_infos[stem] = None; continue
                 media_info_obj = MediaInfo(original_path=batch_data['video'])
                 try:
                     media_info_obj.guess_info = self.renamer.parse_filename(media_info_obj.original_path)
                     media_info_obj.file_type = self.renamer._determine_file_type(media_info_obj.guess_info)
                     initial_media_infos[stem] = media_info_obj
                 except Exception as e_parse: log.error(f"Error parsing '{stem}': {e_parse}"); initial_media_infos[stem] = None
-                progress.update(parse_task, advance=1)
 
-        # Metadata Fetching (remains the same async logic, updating initial_media_infos)
         fetch_tasks = []
         if use_metadata_effective and self.metadata_fetcher:
             stems_to_fetch = [stem for stem, info in initial_media_infos.items() if info and info.file_type != 'unknown']
             log.info(f"Creating {len(stems_to_fetch)} tasks for concurrent metadata fetching...")
-
             if stems_to_fetch:
-                with Progress(TextColumn("[progress.description]{task.description} {task.fields[item_name]}"), BarColumn(), TextColumn("({task.completed} of {task.total})"), TimeElapsedColumn(), console=self.console, disable=disable_rich_progress) as progress_bar:
+                with Progress(*DEFAULT_PROGRESS_COLUMNS, console=self.console, disable=disable_rich_progress) as progress_bar:
                     metadata_overall_task = progress_bar.add_task("Fetching Metadata", total=len(stems_to_fetch), item_name="")
                     for stem in stems_to_fetch:
                         batch_data = file_batches[stem]
@@ -525,43 +494,31 @@ class MainProcessor:
                             name=f"fetch_{stem}"
                         )
                         fetch_tasks.append(task)
-
                     completed_fetch_results_tuples = []
-                    if fetch_tasks:
-                        # Use asyncio.gather to get results in order potentially (or keep as_completed)
-                        # completed_fetch_results_tuples = await asyncio.gather(*fetch_tasks) # If order matters
-                        for f_task in asyncio.as_completed(fetch_tasks): # If order doesn't matter
-                            completed_fetch_results_tuples.append(await f_task)
-
-                        if metadata_overall_task < len(progress_bar.tasks) and not progress_bar.tasks[metadata_overall_task].finished : # Check task_id is valid
-                             progress_bar.update(metadata_overall_task, completed=len(stems_to_fetch))
-
+                    for f_task in asyncio.as_completed(fetch_tasks):
+                        completed_fetch_results_tuples.append(await f_task)
+                    if metadata_overall_task < len(progress_bar.tasks) and not progress_bar.tasks[metadata_overall_task].finished :
+                         progress_bar.update(metadata_overall_task, completed=len(stems_to_fetch), item_name="")
                 for result_item in completed_fetch_results_tuples:
                     if isinstance(result_item, tuple) and len(result_item) == 2:
-                        stem_from_task, updated_media_info_obj = result_item # updated_media_info_obj is a MediaInfo object
+                        stem_from_task, updated_media_info_obj = result_item
                         if updated_media_info_obj:
-                            initial_media_infos[stem_from_task] = updated_media_info_obj # Replace the original MediaInfo
+                            initial_media_infos[stem_from_task] = updated_media_info_obj
                         else:
                             log.error(f"Async task for {stem_from_task} returned None for MediaInfo object")
             else: log.info("No batches required metadata fetching (all unknown or invalid initial parse).")
         else: log.info("Metadata fetching disabled or fetcher not available.")
 
-        # --- Main Processing Loop ---
         run_batch_id = f"run-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:8]}"
         log.info(f"Starting planning and execution run ID: {run_batch_id}")
         results_summary = {'success': 0, 'skipped': 0, 'error': 0, 'actions': 0, 'moved_unknown': 0}
-
         self.console.print("-" * 30)
 
-        # Use Rich progress bar for processing
-        with Progress(TextColumn("[progress.description]{task.description} {task.fields[item_name]}"), BarColumn(), TextColumn("({task.completed} of {task.total})"), TimeElapsedColumn(), console=self.console, disable=disable_rich_progress) as progress_bar:
+        with Progress(*DEFAULT_PROGRESS_COLUMNS, console=self.console, disable=disable_rich_progress) as progress_bar:
             main_processing_task = progress_bar.add_task("Planning/Executing", total=batch_count, item_name="")
 
             for stem, batch_data in file_batches.items():
-                 # Update progress bar with shortened name
-                item_name_short = Path(batch_data.get('video', stem)).name[:30]
-                if len(item_name_short) < len(Path(batch_data.get('video', stem)).name):
-                    item_name_short += "..."
+                item_name_short = Path(batch_data.get('video', stem)).name[:30] + ("..." if len(Path(batch_data.get('video', stem)).name) > 30 else "")
                 progress_bar.update(main_processing_task, advance=1, item_name=item_name_short)
 
                 media_info = initial_media_infos.get(stem)
@@ -569,172 +526,192 @@ class MainProcessor:
                     log.error(f"Skipping batch '{stem}' (initial parse error or no video).")
                     results_summary['error'] += 1; continue
 
-                # --- Log Match Confidence ---
                 match_conf_score = getattr(media_info.metadata, 'match_confidence', None)
                 log_score_str = f"{match_conf_score:.1f}%" if isinstance(match_conf_score, float) else "N/A"
                 log.debug(
                     f"Processing batch '{stem}'. Type: {media_info.file_type}, "
                     f"Metadata Source: {getattr(media_info.metadata, 'source_api', 'N/A')}, "
-                    # Add score to log
                     f"Match Score: {log_score_str}, "
                     f"Metadata Error: {media_info.metadata_error_message}"
                 )
-                # --- End Log Match Confidence ---
-
-
                 if media_info.metadata_error_message:
-                    self.console.print(f"[bold red]API Error for '{media_info.original_path.name}': {media_info.metadata_error_message}[/bold red]")
+                    self.console.print(Panel(
+                        f"[bold red]API Error:[/bold red] {media_info.metadata_error_message}",
+                        title=f"[yellow]'{media_info.original_path.name}'[/yellow]",
+                        border_style="red"
+                    ))
 
-                apply_unknown_logic = False
-                unknown_handling_mode = self.args.unknown_file_handling
+                # --- REVISED UNKNOWN/METADATA FAILURE HANDLING ---
                 plan: Optional[RenamePlan] = None
                 action_result: Dict[str, Any] = {'success': False, 'message': '', 'actions_taken': 0}
                 video_file_path = cast(Path, batch_data.get('video'))
+                should_continue_to_next_batch = False # Flag to break out early
+                proceed_with_normal_planning = False # Flag to enter normal planning
 
                 try:
-                    # --- Determine if unknown logic applies ---
+                    unknown_handling_mode = self.cfg('unknown_file_handling', 'skip', arg_value=getattr(self.args, 'unknown_file_handling', None))
+                    metadata_failed = use_metadata_effective and (media_info.metadata is None or not media_info.metadata.source_api)
+
                     if media_info.file_type == 'unknown':
-                        apply_unknown_logic = True
-                        log.info(f"Batch '{stem}' is type 'unknown' by guessit. Applying mode: '{unknown_handling_mode}'")
-                    elif use_metadata_effective and (media_info.metadata is None or not media_info.metadata.source_api):
-                        if not media_info.metadata_error_message:
-                            log.warning(f"Batch '{stem}' (type: {media_info.file_type}) has missing/failed metadata. Applying unknown_file_handling: '{unknown_handling_mode}'.")
-
-                        if unknown_handling_mode in ['skip', 'move_to_unknown']:
-                            apply_unknown_logic = True
-
-                    # --- Apply unknown logic if needed ---
-                    if apply_unknown_logic:
+                        log.info(f"Batch '{stem}' is type 'unknown'. Applying mode: '{unknown_handling_mode}'")
                         if unknown_handling_mode == 'skip':
-                            skip_msg = media_info.metadata_error_message or f"Skipped (unknown/meta-fail): {video_file_path.name}"
-                            plan = RenamePlan(batch_id=f"unknown_skip_{stem}", video_file=video_file_path, status='skipped', message=skip_msg)
-                            action_result['message'] = plan.message
+                            plan = RenamePlan(batch_id=f"unknown_skip_{stem}", video_file=video_file_path, status='skipped', message=f"Skipped (unknown type): {video_file_path.name}")
+                            action_result['message'] = plan.message # Store message for potential print
+                            should_continue_to_next_batch = True
                         elif unknown_handling_mode == 'move_to_unknown':
                             action_result = self._handle_move_to_unknown(stem, batch_data, run_batch_id)
-                            if action_result.get('success', False) and action_result.get('actions_taken', 0) > 0: results_summary['moved_unknown'] += action_result.get('actions_taken',0)
-                            elif not action_result.get('success', False): results_summary['error'] += 1
-                            else: results_summary['skipped'] +=1
-                            if action_result.get('message') and (disable_rich_progress or not self.args.interactive):
-                                self.console.print(action_result['message'])
-                            continue # To next batch
+                            # Summary updated inside _handle_move
+                            should_continue_to_next_batch = True # Always continue after move attempt
+                        elif unknown_handling_mode == 'guessit_only':
+                            log.debug(f"Unknown type for '{stem}', proceeding with guessit_only planning.")
+                            media_info.metadata = None # Ensure no metadata is used
+                            proceed_with_normal_planning = True
+                        else: # Safeguard
+                            log.error(f"Invalid unknown_handling_mode '{unknown_handling_mode}'. Skipping.")
+                            plan = RenamePlan(batch_id=f"unknown_error_{stem}", video_file=video_file_path, status='skipped', message=f"Skipped (invalid config): {video_file_path.name}")
+                            action_result['message'] = plan.message
+                            should_continue_to_next_batch = True
 
-                    # --- Regular planning if not handled by unknown logic ---
-                    if not plan:
-                         plan = self.renamer.plan_rename(video_file_path, batch_data.get('associated', []), media_info)
+                    elif metadata_failed:
+                        log.warning(f"Batch '{stem}' (type: {media_info.file_type}) has missing/failed metadata. Applying mode: '{unknown_handling_mode}'.")
+                        if unknown_handling_mode == 'skip':
+                            skip_msg = media_info.metadata_error_message or f"Skipped (metadata fetch failed): {video_file_path.name}"
+                            plan = RenamePlan(batch_id=f"metafail_skip_{stem}", video_file=video_file_path, status='skipped', message=skip_msg)
+                            action_result['message'] = plan.message
+                            should_continue_to_next_batch = True
+                        elif unknown_handling_mode == 'move_to_unknown':
+                            action_result = self._handle_move_to_unknown(stem, batch_data, run_batch_id)
+                            # Summary updated inside _handle_move
+                            should_continue_to_next_batch = True # Always continue after move attempt
+                        elif unknown_handling_mode == 'guessit_only':
+                            log.debug(f"Metadata failed for '{stem}', proceeding with guessit_only planning.")
+                            media_info.metadata = None # Ensure no metadata is used
+                            proceed_with_normal_planning = True
+                        else: # Safeguard
+                            log.error(f"Invalid unknown_handling_mode '{unknown_handling_mode}' for metadata failure. Skipping.")
+                            plan = RenamePlan(batch_id=f"metafail_error_{stem}", video_file=video_file_path, status='skipped', message=f"Skipped (invalid config): {video_file_path.name}")
+                            action_result['message'] = plan.message
+                            should_continue_to_next_batch = True
 
-                    # --- START ENHANCED INTERACTIVE LOOP ---
-                    user_choice = 'y' # Default to yes if not interactive or no valid plan
-                    current_plan_to_action = plan # Keep track of the plan to potentially execute
+                    else: # Type known, Metadata succeeded or not enabled
+                        proceed_with_normal_planning = True
 
-                    if self.args.interactive and is_live_run and plan and plan.status in ['success', 'conflict_unresolved']: # Also ask for unresolved conflicts
-                         # --- Get threshold ---
-                         confirm_threshold = self.cfg('confirm_match_below', default_value=None, arg_value=getattr(self.args, 'confirm_match_below', None))
+                    # --- Check if we determined an action other than normal planning ---
+                    if should_continue_to_next_batch:
+                         # Update summary if a skipped plan was generated THIS iteration
+                         if plan and plan.status == 'skipped':
+                            results_summary['skipped'] += 1
+                         # Update summary if _handle_move was called (it updates summary internally)
+                         elif unknown_handling_mode == 'move_to_unknown':
+                              # Summary already updated by _handle_move_to_unknown
+                             pass
+                         # Handle potential error cases where skip plan was generated due to bad config
+                         elif plan and plan.status == 'skipped':
+                              results_summary['error'] += 1 # Count as error if skipped due to bad config
 
-                         while True: # Loop for interaction until a decision (y/n/s/q) is made
-                             self._display_plan_for_confirmation(current_plan_to_action, media_info)
+                         # Print skip/error message if needed (and not handled by move)
+                         if plan and plan.message and unknown_handling_mode != 'move_to_unknown':
+                             # Only print non-interactive skips/errors
+                             if not self.args.interactive:
+                                 self.console.print(Text(plan.message))
+                         # --- Move to the next iteration of the main for loop ---
+                         continue
 
-                             # --- Check and display confidence warning ---
-                             show_confidence_warning = False
-                             current_score = getattr(media_info.metadata, 'match_confidence', None)
-                             if confirm_threshold is not None and isinstance(current_score, float) and current_score < confirm_threshold:
-                                  self.console.print(f"[bold yellow]Warning: Match confidence ({current_score:.1f}%) is below threshold ({confirm_threshold}%).[/bold yellow]")
-                                  show_confidence_warning = True
-                             # --- End confidence check ---
+                    # --- Normal Planning (only runs if proceed_with_normal_planning is True) ---
+                    if proceed_with_normal_planning:
+                        plan = self.renamer.plan_rename(video_file_path, batch_data.get('associated', []), media_info)
+                    # --- END REVISED HANDLING ---
 
-                             choices = ["y", "n", "s", "q", "g", "m"]
-                             prompt_text = "[bold]Apply? ([Y]es/[N]o/[S]kip, [G]uessit Only, [M]anual ID, [Q]uit)"
-                             if show_confidence_warning:
-                                 prompt_text += " - Low confidence match![/bold]"
-                             else:
-                                 prompt_text += ":[/bold]"
 
-                             try:
-                                choice = Prompt.ask(prompt_text, choices=choices, default="y", show_default=False).lower()
+                    # --- Interactive Loop & Execution ---
+                    user_choice = 'y'
+                    current_plan_to_action = plan # Use the plan generated above
 
-                                if choice == 'y': # Accept current plan
-                                    user_choice = 'y'
-                                    if current_plan_to_action.status == 'conflict_unresolved':
-                                        self.console.print("[yellow]Warning: Plan has unresolved conflicts. Proceeding may fail based on config.[/yellow]")
-                                    break
-                                elif choice in ('n', 's'): # Skip
-                                    user_choice = 's'
-                                    current_plan_to_action.status = 'skipped' # Mark plan as skipped
-                                    current_plan_to_action.message = "Skipped by user (interactive)."
-                                    self.console.print("[yellow]Batch skipped by user.[/yellow]")
-                                    break
-                                elif choice == 'q': # Quit
-                                    raise UserAbortError("User quit during interactive mode.")
-                                elif choice == 'g': # Guessit Only
-                                    self.console.print("[cyan]Re-planning using Guessit data only...[/cyan]")
-                                    # Create a temporary copy or modify carefully
-                                    temp_media_info = MediaInfo(original_path=media_info.original_path, guess_info=media_info.guess_info, file_type=media_info.file_type)
-                                    temp_media_info.metadata = None # Key change for Guessit Only
-                                    current_plan_to_action = self.renamer.plan_rename(video_file_path, batch_data.get('associated', []), temp_media_info)
-                                    # Reset confidence score as metadata is now ignored
-                                    media_info.metadata = None # Update the main object for display consistency
-                                    media_info.metadata_error_message = "Using Guessit Only by user choice."
-                                    # Continue loop to show the new plan
-                                elif choice == 'm': # Manual ID
-                                    # ... (Manual ID logic as implemented previously) ...
-                                    api_choice = Prompt.ask("Enter API source ([T]MDB/[V]TVDB):", choices=["t", "v"], default="t").lower()
-                                    api_source = "tmdb" if api_choice == "t" else "tvdb"
-                                    while True:
-                                        try:
-                                            id_str = Prompt.ask(f"Enter {api_source.upper()} ID:")
-                                            manual_id = int(id_str)
-                                            break
-                                        except (ValueError, InvalidResponse): self.console.print("[red]Invalid ID. Please enter a number.[/red]")
-                                        except EOFError: raise UserAbortError("User quit (EOF) during interactive mode.")
-
-                                    refetched_metadata = await self._refetch_with_manual_id(media_info, api_source, manual_id)
-                                    if refetched_metadata:
-                                        self.console.print("[cyan]Re-planning using manually fetched metadata...[/cyan]")
-                                        media_info.metadata = refetched_metadata
-                                        # Confidence score is now set within the refetched_metadata
-                                        media_info.metadata_error_message = None # Clear previous errors
-                                        current_plan_to_action = self.renamer.plan_rename(video_file_path, batch_data.get('associated', []), media_info)
-                                    else:
-                                        self.console.print("[yellow]Manual fetch failed. Displaying previous plan again.[/yellow]")
-                                    # Continue loop
-
-                             except EOFError: raise UserAbortError("User quit (EOF) during interactive mode.")
-                             except InvalidResponse: self.console.print("[red]Invalid choice.[/red]")
-                    # --- END Enhanced Interactive Loop ---
+                    if self.args.interactive and is_live_run and current_plan_to_action and current_plan_to_action.status in ['success', 'conflict_unresolved']:
+                        # (Interactive loop code remains the same as previous version)
+                        confirm_threshold = self.cfg('confirm_match_below', default_value=None, arg_value=getattr(self.args, 'confirm_match_below', None))
+                        while True:
+                            self._display_plan_for_confirmation(current_plan_to_action, media_info)
+                            show_confidence_warning = False
+                            current_score = getattr(media_info.metadata, 'match_confidence', None)
+                            if confirm_threshold is not None and isinstance(current_score, float) and current_score < confirm_threshold:
+                                 self.console.print(f"[bold yellow]Warning: Match confidence ({current_score:.1f}%) is below threshold ({confirm_threshold}%).[/bold yellow]")
+                                 show_confidence_warning = True
+                            choices = ["y", "n", "s", "q", "g", "m"]
+                            prompt_text = "[bold]Apply? ([Y]es/[N]o/[S]kip, [G]uessit Only, [M]anual ID, [Q]uit)"
+                            if show_confidence_warning: prompt_text += " - Low confidence match![/bold]"
+                            else: prompt_text += ":[/bold]"
+                            try:
+                               choice = Prompt.ask(prompt_text, choices=choices, default="y", show_default=False).lower()
+                               if choice == 'y': user_choice = 'y'; break
+                               elif choice in ('n', 's'):
+                                   user_choice = 's'
+                                   if current_plan_to_action:
+                                       current_plan_to_action.status = 'skipped'
+                                       current_plan_to_action.message = "Skipped by user (interactive)."
+                                   else:
+                                       current_plan_to_action = RenamePlan(batch_id=f"interactive_skip_{stem}", video_file=video_file_path, status='skipped', message="Skipped by user (interactive).")
+                                   self.console.print("[yellow]Batch skipped by user.[/yellow]");
+                                   break
+                               elif choice == 'q': raise UserAbortError("User quit during interactive mode.")
+                               elif choice == 'g':
+                                   self.console.print("[cyan]Re-planning using Guessit data only...[/cyan]")
+                                   temp_media_info = MediaInfo(original_path=media_info.original_path, guess_info=media_info.guess_info, file_type=media_info.file_type); temp_media_info.metadata = None
+                                   current_plan_to_action = self.renamer.plan_rename(video_file_path, batch_data.get('associated', []), temp_media_info)
+                                   media_info.metadata = None; media_info.metadata_error_message = "Using Guessit Only by user choice."
+                               elif choice == 'm':
+                                   api_choice = Prompt.ask("Enter API source ([T]MDB/[V]TVDB):", choices=["t", "v"], default="t").lower()
+                                   api_source = "tmdb" if api_choice == "t" else "tvdb"
+                                   while True:
+                                       try: id_str = Prompt.ask(f"Enter {api_source.upper()} ID:"); manual_id = int(id_str); break
+                                       except (ValueError, InvalidResponse): self.console.print("[red]Invalid ID. Please enter a number.[/red]")
+                                       except EOFError: raise UserAbortError("User quit (EOF) during interactive mode.")
+                                   refetched_metadata = await self._refetch_with_manual_id(media_info, api_source, manual_id)
+                                   if refetched_metadata:
+                                       self.console.print("[cyan]Re-planning using manually fetched metadata...[/cyan]")
+                                       media_info.metadata = refetched_metadata; media_info.metadata_error_message = None
+                                       current_plan_to_action = self.renamer.plan_rename(video_file_path, batch_data.get('associated', []), media_info)
+                                   else: self.console.print("[yellow]Manual fetch failed. Displaying previous plan again.[/yellow]")
+                            except EOFError: raise UserAbortError("User quit (EOF) during interactive mode.")
+                            except InvalidResponse: self.console.print("[red]Invalid choice.[/red]")
 
 
                     # --- Execute Action ---
-                    # Uses current_plan_to_action which might have been modified by interaction
+                    # Use the potentially modified plan from interaction or initial handling
                     if current_plan_to_action and current_plan_to_action.status == 'success' and user_choice == 'y':
                         effective_args = self.args; effective_args.live = is_live_run; effective_args.dry_run = not is_live_run
                         action_result = perform_file_actions(plan=current_plan_to_action, run_batch_id=run_batch_id, args_ns=effective_args, cfg_helper=self.cfg, undo_manager=self.undo_manager)
                     elif current_plan_to_action and current_plan_to_action.status == 'skipped':
                          action_result['success'] = False; action_result['message'] = current_plan_to_action.message or f"Skipped batch {stem}."
-                    elif current_plan_to_action: # Plan exists but status is not success/skipped (e.g., failed, conflict_unresolved and user said yes anyway)
+                    elif current_plan_to_action: # Plan exists but not success/skipped
                          action_result['success'] = False; action_result['message'] = f"ERROR: Planning failed for '{stem}'. Reason: {current_plan_to_action.message}"
-                    elif not action_result.get('message'): # Handles cases where plan was never generated (e.g., initial unknown logic path without message)
-                        action_result['message'] = f"No action for batch {stem} (plan not generated)."
+                    elif not action_result.get('message'): # Handle cases where plan was never generated
+                         action_result['success'] = False
+                         action_result['message'] = f"No action for batch {stem} (plan not generated or invalid)."
 
-                    # Update summary based on the FINAL action result
-                    if action_result.get('success', False): results_summary['success'] += 1; results_summary['actions'] += action_result.get('actions_taken', 0)
-                    elif current_plan_to_action and current_plan_to_action.status == 'skipped': results_summary['skipped'] += 1
-                    else: results_summary['error'] += 1
+                    # --- Update summary based on the FINAL action result ---
+                    if action_result.get('success', False):
+                        results_summary['success'] += 1; results_summary['actions'] += action_result.get('actions_taken', 0)
+                    elif current_plan_to_action and current_plan_to_action.status == 'skipped':
+                         results_summary['skipped'] += 1
+                    else: # Any other non-success is an error
+                         results_summary['error'] += 1
 
-                    # Print result message (unless interactive already showed it via panel)
+                    # Print result message (if not handled by interactive mode or move_unknown)
                     if action_result.get('message'):
-                        # Only print detailed results if not interactive OR if an error occurred
-                        if not self.args.interactive or not action_result.get('success'):
+                        # Only print detailed results if not interactive OR if an error/skip occurred
+                        if not self.args.interactive or not action_result.get('success', True):
                            use_rule = not self.args.interactive and is_live_run and action_result.get('success', False) and action_result.get('actions_taken',0) > 0
                            if use_rule: self.console.rule()
-                           # Use Text to potentially handle formatting/styles if needed later
                            self.console.print(Text(action_result['message']))
                            if use_rule: self.console.rule()
 
-
-                except UserAbortError as e: log.warning(str(e)); self.consocsle.print(f"\n{e}"); break
+                except UserAbortError as e: log.warning(str(e)); self.console.print(f"\n{e}"); break
                 except FileExistsError as e: log.critical(str(e)); self.console.print(f"\n[bold red]STOPPING: {e}[/bold red]"); results_summary['error'] += 1; break
                 except Exception as e: results_summary['error'] += 1; log.exception(f"Critical unhandled error processing batch '{stem}': {e}"); self.console.print(f"[bold red]CRITICAL ERROR processing batch {stem}. See log.[/bold red]")
 
-        # ... (Final Summary Printout remains the same) ...
+
+        # --- Final Summary Printout (unchanged) ---
         self.console.print("-" * 30)
         log.info("Processing complete.")
         self.console.print("Processing Summary:")
@@ -763,6 +740,5 @@ class MainProcessor:
             elif results_summary['skipped'] < batch_count and results_summary['success'] == 0 and results_summary['moved_unknown'] == 0 : self.console.print("Operation finished, but some batches were skipped or had no actions planned.")
             else: self.console.print("Operation finished.")
         else: self.console.print("[bold red]Operation finished with errors.[/bold red]")
-
 
 # --- END OF FILE main_processor.py ---
