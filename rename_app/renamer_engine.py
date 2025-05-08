@@ -6,7 +6,7 @@ import os
 import uuid
 from pathlib import Path
 from collections import defaultdict
-from typing import Dict, List, Optional, Any, Set
+from typing import Dict, List, Optional, Any, Set, Tuple
 
 from .models import MediaInfo, MediaMetadata, RenamePlan, RenameAction
 from .utils import (
@@ -20,6 +20,32 @@ except ImportError: GUESSIT_AVAILABLE = False
 
 log = logging.getLogger(__name__)
 
+# Regex for multi-episode range patterns (e.g., S01E01-E02, S01E01-02, S01E01.E02)
+# Requires 2+ digits for episode numbers and specific separators.
+# Uses a negative lookahead (?![\d]) to prevent matching if followed immediately by another digit.
+MULTI_EP_RANGE_PATTERN = re.compile(
+    r'[Ss](?P<snum>\d+)'          # Capture season number (e.g., S01)
+    r'[\s._-]*[Ee]'              # Optional separator before E
+    r'(?P<ep1>\d{2,})'           # Capture first episode number (2+ digits)
+    r'(?:'                       # Non-capturing group for the separator and second episode
+       r'\s*[-]\s*[Ee]?'         # Hyphen separator, optional E (e.g., -E02 or -02)
+       r'|'                      # OR
+       r'\s*[._]\s*[Ee]'         # Dot or Underscore separator, requires E (e.g., .E02)
+    r')'
+    r'(?P<ep2>\d{2,})'           # Capture second episode number (2+ digits)
+    r'(?![\d])',                 # Must NOT be followed by another digit (prevents S01E01E02E03)
+    re.IGNORECASE
+)
+
+# Regex for consecutive multi-episode patterns (e.g., S01E01E02)
+# Requires 2+ digits for *each* episode number part.
+MULTI_EP_CONSECUTIVE_PATTERN = re.compile(
+    r'[Ss](?P<snum>\d+)'         # Capture season number (e.g., S01)
+    r'[Ee](?P<ep1>\d{2,})'        # Capture first episode number (2+ digits)
+    r'[Ee](?P<ep2>\d{2,})'        # Capture second episode number (2+ digits)
+    r'(?![\d])',                 # Must NOT be followed by another digit
+    re.IGNORECASE
+)
 # (sanitize_os_chars should be defined elsewhere or imported if needed globally)
 # ...
 
@@ -57,31 +83,30 @@ class RenamerEngine:
                 'title': media_info.original_path.stem, # Fallback title
                 'show_title': media_info.original_path.stem,
                 'movie_title': media_info.original_path.stem,
-                # Add other essential keys used in formats with default values
                 'season': 0,
                 'episode': 0,
                 'episode_list': [],
+                'episode_range': '', # Add default
                 'year': None,
                 'movie_year': None,
                 'show_year': None,
                 'episode_title': 'Unknown Episode',
                 'scene_tags': [],
                 'scene_tags_dot': '',
-                'resolution': '', # Ensure stream info keys exist even if not populated
+                'resolution': '',
                 'vcodec': '',
                 'acodec': '',
                 'achannels': '',
                 'collection': '',
-                # Default placeholders that might be used in formats
-                 'air_date': '',
-                 'release_date': '',
-                 'ids': {},
-                 'source_api': '',
+                'air_date': '',
+                'release_date': '',
+                'ids': {},
+                'source_api': '',
             }
 
         data = media_info.guess_info.copy()
         metadata = media_info.metadata
-        original_path = media_info.original_path # Use consistent variable
+        original_path = media_info.original_path
 
         # --- Basic file info ---
         data['ext'] = original_path.suffix
@@ -96,52 +121,207 @@ class RenamerEngine:
         data['scene_tags'] = scene_tags_list
         data['scene_tags_dot'] = scene_tags_dot
 
-        # --- Metadata Integration ---
-        # Add defaults for collection and metadata-derived fields first
+        # --- Prepare Episode Info ---
+        final_episode_list: List[int] = []
+        guess_ep_data = None
+
+        # 1. Prioritize guessit keys ('episode_list', 'episode', 'episode_number')
+        if isinstance(media_info.guess_info.get('episode_list'), list):
+            guess_ep_data = media_info.guess_info['episode_list']
+            log.debug("Using guessit 'episode_list' for initial episode data.")
+        elif 'episode' in media_info.guess_info:
+            guess_ep_data = media_info.guess_info['episode']
+            log.debug("Using guessit 'episode' for initial episode data.")
+        elif 'episode_number' in media_info.guess_info:
+            guess_ep_data = media_info.guess_info['episode_number']
+            log.debug("Using guessit 'episode_number' for initial episode data.")
+
+        # 2. Process data found from guessit
+        if guess_ep_data is not None:
+            ep_data_list = guess_ep_data if isinstance(guess_ep_data, list) else [guess_ep_data]
+            for ep in ep_data_list:
+                try:
+                    ep_int = int(str(ep))  # Convert to string first for safety
+                    if ep_int > 0:         # Only add positive episode numbers
+                        final_episode_list.append(ep_int)
+                except (ValueError, TypeError):
+                    log.warning(f"Could not parse episode '{ep}' from guessit data for '{original_path.name}'.")
+            final_episode_list = sorted(list(set(final_episode_list))) # Unique & sorted
+
+        # 3. Attempt Regex Fallback ONLY if guessit didn't yield multiple episodes
+        if len(final_episode_list) <= 1:
+            log.debug(f"Guessit episode list singular or empty ({final_episode_list}), attempting regex detection...")
+            stem = data['original_stem'] # Use the original stem for regex matching
+            regex_ep_list: Optional[List[int]] = None
+
+            range_match = MULTI_EP_RANGE_PATTERN.search(stem)
+            if range_match:
+                try:
+                    ep1 = int(range_match.group('ep1'))
+                    ep2 = int(range_match.group('ep2'))
+                    if ep1 < ep2: # Basic sanity check
+                        regex_ep_list = list(range(ep1, ep2 + 1))
+                        log.info(f"Detected episode range via RANGE regex ({ep1}-{ep2}) for '{original_path.name}'")
+                    else:
+                         log.warning(f"Regex range detection skipped for '{original_path.name}', end episode not greater than start ({ep1} vs {ep2}).")
+                except (ValueError, TypeError, IndexError) as e:
+                    log.warning(f"Error parsing regex RANGE match for '{original_path.name}': {e}")
+
+            # Only try consecutive pattern if range didn't match
+            if regex_ep_list is None:
+                consecutive_match = MULTI_EP_CONSECUTIVE_PATTERN.search(stem)
+                if consecutive_match:
+                    try:
+                        ep1 = int(consecutive_match.group('ep1'))
+                        ep2 = int(consecutive_match.group('ep2'))
+                        # Allow if consecutive or very small gap (e.g., S01E01E03 might be intended)
+                        # Let's stick to strictly consecutive for now for less ambiguity
+                        if ep1 + 1 == ep2:
+                            regex_ep_list = [ep1, ep2]
+                            log.info(f"Detected consecutive episodes via CONSECUTIVE regex ({ep1}, {ep2}) for '{original_path.name}'")
+                        else:
+                             log.warning(f"Regex consecutive match '{consecutive_match.group(0)}' doesn't look sequential ({ep1} -> {ep2}). Ignoring.")
+                    except (ValueError, TypeError, IndexError) as e:
+                        log.warning(f"Error parsing regex CONSECUTIVE match for '{original_path.name}': {e}")
+
+            # If regex found a valid list, OVERWRITE the final_episode_list
+            if regex_ep_list:
+                 log.debug(f"Overwriting guessit episode list with regex result: {regex_ep_list}")
+                 final_episode_list = regex_ep_list
+            else:
+                 log.debug("No valid multi-episode pattern found via regex.")
+
+        # --- Finalize Episode Data for Formatting ---
+        # Ensure unique and sorted integers, even if single episode
+        final_episode_list = sorted(list(set(final_episode_list)))
+        data['episode_list'] = final_episode_list
+        # Use 0 as default if list is empty, otherwise take the first element
+        data['episode'] = final_episode_list[0] if final_episode_list else 0
+        data['episode_range'] = '' # Default empty
+        if len(final_episode_list) > 1:
+            # Pad with 2 digits minimum
+            data['episode_range'] = f"E{final_episode_list[0]:0>2}-E{final_episode_list[-1]:0>2}"
+            log.debug(f"Setting episode range format data: {data['episode_range']}")
+
+        # # --- Initial Episode Info from Guessit ---
+        # # Prioritize 'episode_list' if guessit found multiple
+        # initial_episode_list: List[int] = []
+        # if isinstance(data.get('episode_list'), list) and len(data['episode_list']) > 1:
+        #     try:
+        #         initial_episode_list = [int(ep) for ep in data['episode_list'] if isinstance(ep, (int, str)) and str(ep).isdigit()]
+        #         log.debug(f"Using multi-episode list from guessit: {initial_episode_list}")
+        #     except (ValueError, TypeError):
+        #         log.warning("Could not parse episode_list from guessit.")
+        #         initial_episode_list = []
+        # # Fallback to single 'episode' or 'episode_number'
+        # if not initial_episode_list:
+        #     ep_num = data.get('episode') or data.get('episode_number')
+        #     if ep_num is not None:
+        #         try:
+        #             initial_episode_list = [int(ep_num)]
+        #         except (ValueError, TypeError):
+        #             log.warning(f"Could not parse single episode number: {ep_num}")
+
+        # # --- Enhanced Multi-Episode Detection (if needed) ---
+        # final_episode_list = initial_episode_list
+        # if len(final_episode_list) <= 1: # Only attempt regex if guessit didn't give a clear multi-ep list
+        #     log.debug(f"Guessit episode list is singular or empty ({final_episode_list}), attempting regex detection...")
+        #     stem = data['original_stem']
+        #     range_match = MULTI_EP_RANGE_PATTERN.search(stem)
+        #     consecutive_match = MULTI_EP_CONSECUTIVE_PATTERN.search(stem)
+
+        #     if range_match:
+        #         try:
+        #             ep1 = int(range_match.group('ep1'))
+        #             ep2_str = range_match.group('ep2') # Can have multiple captures, use the last one
+        #             if ep2_str: # Ensure ep2 was captured
+        #                  ep2 = int(ep2_str)
+        #                  if ep1 < ep2: # Basic sanity check
+        #                      final_episode_list = list(range(ep1, ep2 + 1))
+        #                      log.info(f"Detected episode range via regex ({ep1}-{ep2}) for '{original_path.name}'")
+        #                  else:
+        #                       log.warning(f"Regex range detection skipped for '{original_path.name}', end episode not greater than start ({ep1} vs {ep2}).")
+        #             else:
+        #                  log.warning(f"Regex range detection failed for '{original_path.name}', could not extract end episode.")
+        #         except (ValueError, TypeError, IndexError) as e:
+        #             log.warning(f"Error parsing regex episode range match for '{original_path.name}': {e}")
+        #     elif consecutive_match:
+        #          try:
+        #             ep1 = int(consecutive_match.group('ep1'))
+        #             ep2 = int(consecutive_match.group('ep2'))
+        #             # Basic assumption: E01E02 means episodes 1 and 2
+        #             if ep1 + 1 == ep2:
+        #                 final_episode_list = [ep1, ep2]
+        #                 log.info(f"Detected consecutive episodes via regex ({ep1}, {ep2}) for '{original_path.name}'")
+        #             else:
+        #                 log.warning(f"Regex consecutive match '{consecutive_match.group(0)}' doesn't look sequential. Sticking to single ep: {ep1}")
+        #                 final_episode_list = [ep1] # Revert to just the first if not sequential
+        #          except (ValueError, TypeError, IndexError) as e:
+        #              log.warning(f"Error parsing regex consecutive episode match for '{original_path.name}': {e}")
+
+
+        # # --- Finalize Episode Data for Formatting ---
+        # final_episode_list = sorted(list(set(final_episode_list))) # Ensure unique and sorted integers
+        # data['episode_list'] = final_episode_list
+        # data['episode'] = final_episode_list[0] if final_episode_list else data.get('season', 0) # Use season if no ep? Or just 0? Let's use 0.
+        # data['episode'] = final_episode_list[0] if final_episode_list else 0 # Use 0 if list is empty
+        # data['episode_range'] = '' # Default empty
+        # if len(final_episode_list) > 1:
+        #     data['episode_range'] = f"E{final_episode_list[0]:0>2}-E{final_episode_list[-1]:0>2}"
+        #     log.debug(f"Setting episode range format data: {data['episode_range']}")
+
+
+        # --- Metadata Integration (incorporating the final_episode_list) ---
+        # Add defaults first
         data.setdefault('collection', '')
         data.setdefault('source_api', '')
         data.setdefault('ids', {})
+        data.setdefault('air_date', '') # Default air_date
+        data.setdefault('release_date', '') # Default release_date
 
         if metadata:
             data['source_api'] = metadata.source_api or ''
             data['ids'] = metadata.ids or {} # Ensure ids is a dict
-             # Add collection info from metadata object (if movie)
+
             if metadata.is_movie:
-                data['collection'] = metadata.collection_name or '' # Use extracted name
-
-             # Series specific metadata overwrite/population
-            if metadata.is_series:
-                show_title_raw = metadata.show_title if metadata.show_title else data.get('title', 'Unknown_Show')
-                data['show_title'] = sanitize_os_chars(show_title_raw) if show_title_raw else 'Unknown_Show'
-                data['show_year'] = metadata.show_year
-                data['season'] = metadata.season if metadata.season is not None else data.get('season', 0) # Ensure season is int
-                data['episode_list'] = metadata.episode_list or data.get('episode_list', [])
-                ep_list = sorted(data['episode_list'])
-                if len(ep_list) > 1:
-                    data['episode_range'] = f"E{ep_list[0]:0>2}-E{ep_list[-1]:0>2}"
-                    titles_raw = [metadata.episode_titles.get(ep, f'Ep_{ep}') for ep in ep_list]
-                    titles = [sanitize_os_chars(t) if t else f'Ep_{ep}' for ep, t in zip(ep_list, titles_raw)]
-                    specific_titles = [t for t in titles if not t.startswith("Ep_")]
-                    data['episode_title'] = " & ".join(specific_titles if specific_titles else titles[:1])
-                    data['episode'] = ep_list[0] # Use first episode number for {episode} placeholder
-                elif ep_list:
-                    data['episode'] = ep_list[0]
-                    ep_title_meta = metadata.episode_titles.get(data['episode'])
-                    data['episode_title'] = sanitize_os_chars(ep_title_meta) if ep_title_meta else data.get('episode_title', f"Episode_{data['episode']}")
-                else: # Handle case where episode_list is empty but was series type
-                    data['episode'] = data.get('episode', 0)
-                    data['episode_title'] = data.get('episode_title', 'Unknown Episode')
-                data['air_date'] = next(iter(metadata.air_dates.values()), data.get('date'))
-
-            # Movie specific metadata overwrite/population
-            elif metadata.is_movie:
+                # Movie specific metadata overwrite/population
                 movie_title_raw = metadata.movie_title if metadata.movie_title else data.get('title', 'Unknown_Movie')
                 data['movie_title'] = sanitize_os_chars(movie_title_raw) if movie_title_raw else 'Unknown_Movie'
                 data['movie_year'] = metadata.movie_year or data.get('year')
                 data['release_date'] = metadata.release_date
+                data['collection'] = metadata.collection_name or ''
+
+            elif metadata.is_series:
+                # Series specific metadata overwrite/population
+                show_title_raw = metadata.show_title if metadata.show_title else data.get('title', 'Unknown_Show')
+                data['show_title'] = sanitize_os_chars(show_title_raw) if show_title_raw else 'Unknown_Show'
+                data['show_year'] = metadata.show_year
+                data['season'] = metadata.season if metadata.season is not None else data.get('season', 0) # Ensure season is int
+
+                # Use the potentially updated final_episode_list here
+                ep_list_for_titles = data['episode_list'] # Already sorted and unique
+
+                # Generate episode title(s) based on the final list
+                if len(ep_list_for_titles) > 1:
+                    titles_raw = [metadata.episode_titles.get(ep, f'Ep_{ep}') for ep in ep_list_for_titles]
+                    titles = [sanitize_os_chars(t) if t else f'Ep_{ep}' for ep, t in zip(ep_list_for_titles, titles_raw)]
+                    specific_titles = [t for t in titles if not t.startswith("Ep_")]
+                    # Join specific titles if available, otherwise just use the first title found (raw or generated)
+                    data['episode_title'] = " & ".join(specific_titles) if specific_titles else (titles[0] if titles else 'Multiple Episodes')
+                elif ep_list_for_titles:
+                    first_ep = ep_list_for_titles[0]
+                    ep_title_meta = metadata.episode_titles.get(first_ep)
+                    data['episode_title'] = sanitize_os_chars(ep_title_meta) if ep_title_meta else data.get('episode_title', f"Episode_{first_ep}")
+                else: # Handle case where list is empty
+                    data['episode_title'] = data.get('episode_title', 'Unknown Episode')
+
+                # Get air date for the first episode in the list
+                first_ep_num = ep_list_for_titles[0] if ep_list_for_titles else None
+                if first_ep_num is not None:
+                    data['air_date'] = metadata.air_dates.get(first_ep_num, data.get('date'))
+
 
         # --- Fallbacks for non-metadata cases ---
-        # Ensure essential keys have *some* value after potential metadata merge
         if 'show_title' not in data:
             show_title_guess = data.get('title', 'Unknown Show')
             data['show_title'] = sanitize_os_chars(show_title_guess) if show_title_guess else 'Unknown Show'
@@ -149,27 +329,23 @@ class RenamerEngine:
             movie_title_guess = data.get('title', 'Unknown Movie')
             data['movie_title'] = sanitize_os_chars(movie_title_guess) if movie_title_guess else 'Unknown Movie'
         if 'episode_title' not in data:
-            ep_title_guess = data.get('episode_title', f"Episode_{data.get('episode', 0)}")
-            data['episode_title'] = sanitize_os_chars(ep_title_guess) if ep_title_guess else f"Episode_{data.get('episode', 0)}"
+            # Ensure fallback uses the finalized first episode number
+            ep_num_fallback = data['episode']
+            ep_title_guess = data.get('episode_title', f"Episode_{ep_num_fallback}")
+            data['episode_title'] = sanitize_os_chars(ep_title_guess) if ep_title_guess else f"Episode_{ep_num_fallback}"
+
+        # Ensure essential numeric/year keys have fallbacks AFTER metadata processing
         data.setdefault('season', 0)
-        data.setdefault('episode', data.get('episode_number', 0)) # Prefer guessit's episode_number if available
-        if 'episode_list' not in data: data['episode_list'] = [data['episode']] # Ensure episode_list exists
         data.setdefault('movie_year', data.get('year'))
         data.setdefault('show_year', data.get('year'))
-        if len(data['episode_list']) > 1 and 'episode_range' not in data:
-            ep_list = sorted([ep for ep in data['episode_list'] if isinstance(ep, int)]) # Ensure ints
-            if ep_list: data['episode_range'] = f"E{ep_list[0]:0>2}-E{ep_list[-1]:0>2}"
-
 
         # --- Selective Stream Info Extraction ---
         stream_info_enabled = self.cfg('extract_stream_info', False)
-        should_extract_streams = False # Default to False
+        should_extract_streams = False
 
         if stream_info_enabled:
             log.debug("Stream info extraction enabled by config. Checking format strings...")
             stream_placeholders = {"{resolution}", "{vcodec}", "{acodec}", "{achannels}"}
-            # Get all potentially relevant format strings using current config context
-            # Use the 'media_info.file_type' to determine which formats are most relevant
             relevant_formats = []
             if media_info.file_type == 'series':
                  relevant_formats.extend([
@@ -183,17 +359,15 @@ class RenamerEngine:
                      self.cfg('movie_format'),
                      self.cfg('folder_format_movie')
                  ])
-            # Always check subtitle format as it *could* theoretically use stream info, though unlikely
             relevant_formats.append(self.cfg('subtitle_format'))
 
-            # Filter out None values and check for placeholders
-            formats_to_check = [f for f in relevant_formats if f] # Ensure strings
+            formats_to_check = [f for f in relevant_formats if f]
 
             for fmt in formats_to_check:
                 if any(ph in fmt for ph in stream_placeholders):
                     should_extract_streams = True
                     log.debug(f"Found stream placeholder in format: '{fmt}'. Extraction needed for '{original_path.name}'.")
-                    break # Found one, no need to check others
+                    break
 
             if not should_extract_streams:
                 log.debug(f"No stream info placeholders found in relevant format strings for '{original_path.name}'. Skipping extraction.")
@@ -201,24 +375,21 @@ class RenamerEngine:
              log.debug("Stream info extraction disabled by config.")
 
 
-        # Initialize stream info keys in data dict regardless
         data['resolution'] = ''
         data['vcodec'] = ''
         data['acodec'] = ''
         data['achannels'] = ''
 
-        if should_extract_streams: # <-- Use the calculated flag
+        if should_extract_streams:
             log.debug(f"Proceeding with stream info extraction for {original_path.name}")
             try:
-                stream_info = extract_stream_info(original_path) # Call util function
+                stream_info = extract_stream_info(original_path)
                 if stream_info:
-                    # Update data dict, only overwriting if util returned non-empty value
                     for key, value in stream_info.items():
-                        if value: # Check if the value from pymediainfo is truthy (not None or empty string)
+                        if value:
                             data[key] = value
             except Exception as e_stream:
                 log.error(f"Failed to extract stream info for {original_path.name}: {e_stream}")
-        # --- END Selective Stream Info Extraction ---
 
         # Add remaining guessit keys if not already set (safer at the end)
         for gk, gv in media_info.guess_info.items():
@@ -227,7 +398,6 @@ class RenamerEngine:
         log.debug(f"Prepared format data: {data}")
         return data
 
-    # (... rest of RenamerEngine class: _format_new_name, _format_folder_path, _format_associated_name, plan_rename ...)
     def _format_new_name(self, media_info: MediaInfo, format_data: Dict) -> str:
         mode = media_info.file_type
         format_str = None

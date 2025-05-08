@@ -52,6 +52,11 @@ def create_parser():
     )
 
     parser_rename.add_argument(
+        "--series-source-pref", type=str, default=None,
+        help="Preferred metadata source order for series (comma-separated, e.g., tmdb,tvdb or tvdb,tmdb)."
+    )    
+
+    parser_rename.add_argument(
         "--unknown-file-handling", choices=['skip', 'guessit_only', 'move_to_unknown'],
         default=None,
         help="How to handle files where type cannot be determined (overrides config)."
