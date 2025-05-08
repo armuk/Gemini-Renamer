@@ -26,6 +26,9 @@ def create_parser():
     parser_rename.add_argument("--processing-mode", choices=['auto', 'series', 'movie'], default=None, help="Force processing mode (overrides config).")
     parser_rename.add_argument("--use-metadata", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable metadata fetching (overrides config).")
     parser_rename.add_argument("--use-stream-info", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable extracting technical stream info (overrides config).")
+    # --- NEW ---
+    parser_rename.add_argument("--preserve-mtime", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable preserving original file modification time (overrides config).")
+    # --- END NEW ---
     parser_rename.add_argument("--series-format", type=str, default=None, help="Series filename format string (overrides config).")
     parser_rename.add_argument("--movie-format", type=str, default=None, help="Movie filename format string (overrides config).")
     parser_rename.add_argument("--subtitle-format", type=str, default=None, help="Subtitle filename format string (overrides config).")
@@ -43,32 +46,22 @@ def create_parser():
     parser_rename.add_argument("--scene-tags-to-preserve", type=str, default=None, help="Comma-separated scene tags to preserve (overrides config).")
     parser_rename.add_argument("--subtitle-encoding-detection", action=argparse.BooleanOptionalAction, default=None, help="Detect subtitle encoding (overrides config).")
 
-    # --- NEW: Match Confidence Threshold ---
     parser_rename.add_argument(
-        "--confirm-match-below",
-        type=int, # Use int for simplicity (0-100)
-        metavar="SCORE",
-        default=None, # Will be resolved by ConfigHelper using config or default None
-        choices=range(0, 101), # Restrict to sensible range 0-100
+        "--confirm-match-below", type=int, metavar="SCORE", default=None,
+        choices=range(0, 101),
         help="Interactively confirm metadata match if fuzzy score is below SCORE (0-100)."
     )
-    # --- END NEW ---
 
-    # --- Unknown File Handling Args ---
     parser_rename.add_argument(
-        "--unknown-file-handling",
-        choices=['skip', 'guessit_only', 'move_to_unknown'],
-        default=None, # Will be resolved by ConfigHelper
+        "--unknown-file-handling", choices=['skip', 'guessit_only', 'move_to_unknown'],
+        default=None,
         help="How to handle files where type cannot be determined (overrides config)."
     )
     parser_rename.add_argument(
-        "--unknown-files-dir",
-        type=str, # Path will be resolved later
-        default=None, # Will be resolved by ConfigHelper
+        "--unknown-files-dir", type=str, default=None,
         help="Directory for 'move_to_unknown' handling (relative to target or absolute, overrides config)."
     )
 
-    # --- Safety/Destination Args ---
     safety_group = parser_rename.add_mutually_exclusive_group()
     safety_group.add_argument("--backup-dir", type=Path, default=None, help="Backup originals before action.")
     safety_group.add_argument("--stage-dir", type=Path, default=None, help="Move files to staging dir.")
@@ -80,15 +73,8 @@ def create_parser():
         "batch_id", type=str, nargs='?', default=None,
         help="Batch ID of the run to undo/preview (required unless --list is used)."
     )
-    parser_undo.add_argument(
-        "--list", action="store_true",
-        help="List available batch IDs and their timestamps from the undo log."
-    )
-    parser_undo.add_argument(
-        "--dry-run", action="store_true",
-        help="Show which files would be reverted for the given batch ID without taking action."
-    )
-    # Allow overriding config for undo-specific settings if needed
+    parser_undo.add_argument("--list", action="store_true", help="List available batch IDs and their timestamps from the undo log.")
+    parser_undo.add_argument("--dry-run", action="store_true", help="Show which files would be reverted for the given batch ID without taking action.")
     parser_undo.add_argument("--enable-undo", action=argparse.BooleanOptionalAction, default=None, help="Enable undo log for revert actions (rarely needed).")
     parser_undo.add_argument("--check-integrity", action=argparse.BooleanOptionalAction, default=None, help="Verify size/mtime before reverting.")
     parser_undo.add_argument("--log-file", type=str, default=None, help="Log file path for undo operation.")
@@ -97,29 +83,19 @@ def create_parser():
     parser_config = subparsers.add_parser('config', help='Manage application configuration.')
     config_subparsers = parser_config.add_subparsers(dest='config_command', required=True, help='Configuration action to perform')
     parser_config_show = config_subparsers.add_parser('show', help='Show the currently loaded configuration.')
-    parser_config_show.add_argument(
-        '--profile', type=str,
-        help='Show configuration for a specific profile (merges with default).'
-    )
-    parser_config_show.add_argument(
-        '--raw', action="store_true",
-        help="Show the raw TOML content of the loaded config file without merging or validation."
-    )
+    parser_config_show.add_argument('--profile', type=str, help='Show configuration for a specific profile (merges with default).')
+    parser_config_show.add_argument('--raw', action="store_true", help="Show the raw TOML content of the loaded config file without merging or validation.")
     parser_config_validate = config_subparsers.add_parser('validate', help='Validate the configuration file against the schema.')
 
     # --- Setup Subparser ---
     parser_setup = subparsers.add_parser('setup', help='Interactively set up API keys and other initial configurations.')
-    parser_setup.add_argument(
-        "--dotenv-path", type=Path, default=None,
-        help="Specify a custom path for the .env file (default: .env in CWD)."
-    )
+    parser_setup.add_argument("--dotenv-path", type=Path, default=None, help="Specify a custom path for the .env file (default: .env in CWD).")
 
     return parser
 
 def parse_arguments(argv=None):
     parser = create_parser()
     args = parser.parse_args(argv)
-    # Ensure profile exists, default to 'default' if not present or None
     if not hasattr(args, 'profile') or args.profile is None:
         args.profile = 'default'
     return args
