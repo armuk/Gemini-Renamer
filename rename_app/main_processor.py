@@ -748,7 +748,10 @@ class MainProcessor:
                             args_ns=effective_args,
                             cfg_helper=self.cfg,
                             undo_manager=self.undo_manager,
-                            run_batch_id=run_batch_id
+                            run_batch_id=run_batch_id,
+                            # --- ADD THIS ARGUMENT ---
+                            media_info=media_info
+                            # --- END ADDITION ---
                         )
                     elif current_plan_to_action and current_plan_to_action.status == 'skipped':
                          action_result['success'] = False; action_result['message'] = current_plan_to_action.message or f"Skipped batch {stem}."

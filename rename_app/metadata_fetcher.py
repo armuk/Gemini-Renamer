@@ -13,7 +13,7 @@ from .api_clients import get_tmdb_client, get_tvdb_client
 
 # --- Local Imports ---
 from .exceptions import MetadataError
-from .models import MediaMetadata # Ensure MediaMetadata is imported
+from .models import MediaMetadata, MediaInfo # Ensure MediaMetadata is imported
 
 log = logging.getLogger(__name__)
 
