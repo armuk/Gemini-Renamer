@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 import time
 import os
 import fnmatch
-import hashlib
+import hashlib # Ensure hashlib is imported
 import shutil
 from typing import Optional, Tuple, List, Dict, Any
 
@@ -38,34 +38,50 @@ from .exceptions import RenamerError, FileOperationError
 log = logging.getLogger(__name__)
 TEMP_SUFFIX_PREFIX = ".renametmp_"
 MTIME_TOLERANCE = 1.0
+HASH_CHUNK_SIZE = 65536 # 64kb chunks for full hash
 
 class UndoManager:
-    # --- (__init__, _resolve_db_path, _connect, _init_db, _calculate_partial_hash unchanged) ---
     def __init__(self, cfg_helper):
-        self.cfg = cfg_helper; self.db_path = None; self.is_enabled = False; self.check_integrity = False; self.hash_check_bytes = 0
+        self.cfg = cfg_helper; self.db_path = None; self.is_enabled = False; self.check_integrity = False; self.hash_check_bytes = 0; self.use_full_hash = False
+        self.console = Console() # Use rich console for output
         try:
             self.is_enabled = self.cfg('enable_undo', False)
             if self.is_enabled:
                 self.db_path = self._resolve_db_path(); self._init_db()
                 self.check_integrity = self.cfg('undo_check_integrity', False)
+                # Determine hashing strategy based on config/args
+                self.use_full_hash = self.cfg('undo_integrity_hash_full', False) # Check the new full hash setting
                 try:
                     hash_bytes_cfg = self.cfg('undo_integrity_hash_bytes', 0); self.hash_check_bytes = int(hash_bytes_cfg) if hash_bytes_cfg else 0
-                    if self.hash_check_bytes < 0: log.warning("undo_integrity_hash_bytes cannot be negative. Disabling hash check."); self.hash_check_bytes = 0
-                except (ValueError, TypeError): log.warning(f"Invalid 'undo_integrity_hash_bytes'. Disabling hash check."); self.hash_check_bytes = 0
+                    if self.hash_check_bytes < 0: log.warning("undo_integrity_hash_bytes cannot be negative. Disabling partial hash check."); self.hash_check_bytes = 0
+                except (ValueError, TypeError): log.warning(f"Invalid 'undo_integrity_hash_bytes'. Disabling partial hash check."); self.hash_check_bytes = 0
+
                 log_msg = f"UndoManager initialized (DB: {self.db_path}, Integrity: {self.check_integrity}"
-                if self.check_integrity and self.hash_check_bytes > 0: log_msg += f", Hash Check: {self.hash_check_bytes} bytes)"
-                else: log_msg += ")"
+                if self.check_integrity:
+                    if self.use_full_hash:
+                        log_msg += ", Hash Check: FULL)"
+                        if self.hash_check_bytes > 0: log.warning("undo_integrity_hash_full=true overrides undo_integrity_hash_bytes.")
+                    elif self.hash_check_bytes > 0:
+                        log_msg += f", Hash Check: Partial ({self.hash_check_bytes} bytes))"
+                    else:
+                        log_msg += ", Hash Check: Disabled)"
+                else:
+                    log_msg += ")"
                 log.info(log_msg)
             else: log.info("Undo feature disabled by configuration.")
         except Exception as e: self.is_enabled = False; log.exception(f"Failed to initialize UndoManager: {e}")
+
     def _resolve_db_path(self):
+        # ... (no changes needed) ...
         db_path_config = self.cfg('undo_db_path', None)
         try:
             if db_path_config: path = Path(db_path_config).resolve()
             else: path = Path(__file__).parent.parent / "rename_log.db"; path = path.resolve()
             path.parent.mkdir(parents=True, exist_ok=True); return path
         except Exception as e: raise RenamerError(f"Cannot resolve undo database path: {e}") from e
+
     def _connect(self):
+        # ... (no changes needed) ...
         if not self.db_path: raise RenamerError("Cannot connect to undo database: path not resolved.")
         try:
             conn = sqlite3.connect(self.db_path, timeout=10.0); conn.row_factory = sqlite3.Row
@@ -75,7 +91,9 @@ class UndoManager:
             except sqlite3.Error as pe: log.warning(f"Could not set PRAGMA busy_timeout=5000 for undo DB ({self.db_path}): {pe}")
             return conn
         except sqlite3.Error as e: raise RenamerError(f"Cannot connect to undo database '{self.db_path}': {e}") from e
+
     def _init_db(self):
+        # ... (no changes needed) ...
         try:
             with self._connect() as conn:
                 conn.execute("""
@@ -92,28 +110,54 @@ class UndoManager:
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_batch_id ON rename_log(batch_id)"); conn.commit()
         except sqlite3.Error as e: raise RenamerError(f"Failed to initialize undo database schema: {e}") from e
         except RenamerError as e: raise RenamerError(f"Failed to connect during undo database initialization: {e}") from e
-    def _calculate_partial_hash(self, file_path: Path, num_bytes: int) -> Optional[str]:
-        if num_bytes <= 0: return None
-        try:
-            hasher = hashlib.sha256();
-            with open(file_path, 'rb') as f: chunk = f.read(num_bytes); hasher.update(chunk if chunk else b'')
-            return hasher.hexdigest()
-        except FileNotFoundError: log.warning(f"Cannot calculate hash: File not found '{file_path}'"); return None
-        except OSError as e: log.warning(f"Cannot calculate hash for '{file_path}': {e}"); return None
-        except Exception as e: log.exception(f"Unexpected error calculating hash for '{file_path}': {e}"); return None
 
-    # --- (log_action, update_action_status, prune_old_batches, _find_temp_file, _check_file_integrity, list_batches unchanged) ---
+    # --- MODIFIED: Renamed and updated hashing function ---
+    def _calculate_file_hash(self, file_path: Path, full_hash: bool) -> Optional[str]:
+        """Calculates a full or partial SHA256 hash of a file."""
+        hasher = hashlib.sha256()
+        try:
+            with open(file_path, 'rb') as f:
+                if full_hash:
+                    log.debug(f"Calculating FULL hash for {file_path.name}")
+                    while True:
+                        chunk = f.read(HASH_CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        hasher.update(chunk)
+                elif self.hash_check_bytes > 0: # Calculate partial hash only if bytes > 0
+                    log.debug(f"Calculating PARTIAL hash ({self.hash_check_bytes} bytes) for {file_path.name}")
+                    chunk = f.read(self.hash_check_bytes)
+                    hasher.update(chunk if chunk else b'')
+                else: # No hash needed (full_hash=False and hash_check_bytes=0)
+                    return None
+            return hasher.hexdigest()
+        except FileNotFoundError:
+            log.warning(f"Cannot calculate hash: File not found '{file_path}'")
+            return None
+        except OSError as e:
+            log.warning(f"Cannot calculate hash for '{file_path}': {e}")
+            return None
+        except Exception as e:
+            log.exception(f"Unexpected error calculating hash for '{file_path}': {e}")
+            return None
+    # --- END MODIFIED ---
+
     def log_action(self, batch_id, original_path, new_path, item_type, status):
         if not self.is_enabled: return False
         orig_p = Path(original_path); original_size, original_mtime, original_hash = None, None, None
         can_stat = item_type == 'file' and status in {'pending_final', 'renamed', 'moved', 'trashed'}
+
         if can_stat:
             try:
                 if orig_p.is_file():
                     stat = orig_p.stat(); original_size = stat.st_size; original_mtime = stat.st_mtime
-                    if self.hash_check_bytes > 0: original_hash = self._calculate_partial_hash(orig_p, self.hash_check_bytes)
+                    # --- MODIFIED: Use the determined hashing strategy ---
+                    if self.use_full_hash or self.hash_check_bytes > 0: # Check if any hashing is enabled
+                        original_hash = self._calculate_file_hash(orig_p, full_hash=self.use_full_hash)
+                    # --- END MODIFIED ---
             except OSError as e: log.warning(f"Could not stat original file during log_action for '{original_path}': {e}")
             except Exception as e: log.exception(f"Unexpected error getting stats/hash for '{original_path}' during log_action: {e}")
+
         try:
             with self._connect() as conn:
                 cursor = conn.execute(
@@ -122,20 +166,18 @@ class UndoManager:
                 )
                 conn.commit(); log.debug(f"Logged action for '{original_path}' (batch '{batch_id}') with status '{status}'."); return True
         except sqlite3.IntegrityError as e:
-             # Enhanced log message for UNIQUE constraint violation
              log.warning(f"Duplicate entry prevented in rename log for '{original_path}' (batch '{batch_id}'): {e}."); return False
         except sqlite3.Error as e: log.error(f"Database error during log_action for '{original_path}' (batch '{batch_id}'): {e}"); return False
         except Exception as e: log.exception(f"Unexpected error logging undo action for '{original_path}' (batch '{batch_id}'): {e}"); return False
 
     def update_action_status(self, batch_id, original_path, new_status, conn: Optional[sqlite3.Connection] = None):
+        # ... (no changes needed) ...
         if not self.is_enabled: return False
         log.debug(f"Updating status to '{new_status}' for '{original_path}' in batch '{batch_id}'")
         manage_connection = conn is None; _conn = None
         try:
             _conn = self._connect() if manage_connection else conn
-            # Use a dedicated cursor for thread safety if manager becomes shared (though likely not an issue here)
             cursor = _conn.cursor()
-            # Update based on original path and batch_id, EXCLUDING already reverted actions
             cursor.execute("UPDATE rename_log SET status = ? WHERE batch_id = ? AND original_path = ? AND status != 'reverted'", (new_status, batch_id, str(original_path)))
             updated_count = cursor.rowcount
             if manage_connection: _conn.commit() # Commit only if managing the connection
@@ -144,10 +186,10 @@ class UndoManager:
         except sqlite3.Error as e: log.error(f"Failed updating undo status for '{original_path}' (batch '{batch_id}') to '{new_status}': {e}"); return False
         except Exception as e: log.exception(f"Unexpected error updating undo status for '{original_path}' (batch '{batch_id}') to '{new_status}': {e}"); return False
         finally:
-            # Ensure connection is closed only if it was opened by this method
             if manage_connection and _conn: _conn.close()
 
     def prune_old_batches(self):
+        # ... (no changes needed) ...
         if not self.is_enabled: return
         expire_days_cfg = self.cfg('undo_expire_days', 30)
         try:
@@ -168,6 +210,7 @@ class UndoManager:
         except Exception as e: log.exception(f"Unexpected error during undo log pruning: {e}")
 
     def _find_temp_file(self, final_dest_path: Path) -> Optional[Path]:
+        # ... (no changes needed) ...
         temp_pattern = f"{final_dest_path.stem}{TEMP_SUFFIX_PREFIX}*{final_dest_path.suffix}"
         try:
             matches = list(final_dest_path.parent.glob(temp_pattern))
@@ -180,29 +223,54 @@ class UndoManager:
         if not self.check_integrity: return True, "Skipped (Check Disabled)"
         size_ok, mtime_ok, hash_ok = True, True, True; reasons = []
         has_size = logged_size is not None; has_mtime = logged_mtime is not None
-        has_hash = logged_hash is not None and self.hash_check_bytes > 0
+        has_hash = logged_hash is not None
         # Require at least one logged stat to perform check
         if not has_size and not has_mtime and not has_hash: return True, "Skipped (no stats logged)"
+
         try: current_stat = current_path.stat(); current_size = current_stat.st_size; current_mtime = current_stat.st_mtime
         except OSError as e: return False, f"FAIL (Cannot stat: {e})"
         except Exception as e: log.exception(f"Unexpected error during integrity check stat for {current_path}"); return False, "FAIL (Check Error)"
+
         if has_size:
             size_ok = current_size == logged_size
             if not size_ok: reasons.append(f"Size ({current_size} != {logged_size})")
         if has_mtime:
              mtime_ok = abs(current_mtime - logged_mtime) < MTIME_TOLERANCE
              if not mtime_ok: reasons.append(f"MTime ({current_mtime:.2f} !~= {logged_mtime:.2f})")
+
+        # --- MODIFIED: Hash Check Logic ---
         if has_hash:
-            current_hash = self._calculate_partial_hash(current_path, self.hash_check_bytes)
-            if current_hash is None: hash_ok = False; reasons.append("Hash (Cannot calc current)")
+            # Determine hashing mode based on CURRENT settings at the time of UNDO
+            # This is a pragmatic choice acknowledging config might change.
+            # A more robust solution might store hash type in DB.
+            calculate_full_hash_now = self.cfg('undo_integrity_hash_full', False)
+            calculate_partial_hash_now = self.hash_check_bytes > 0 and not calculate_full_hash_now
+
+            # Only calculate current hash if a specific mode is active
+            current_hash = None
+            if calculate_full_hash_now:
+                current_hash = self._calculate_file_hash(current_path, full_hash=True)
+            elif calculate_partial_hash_now:
+                current_hash = self._calculate_file_hash(current_path, full_hash=False)
+
+            if current_hash is None:
+                # Log if we expected to calculate but couldn't
+                if calculate_full_hash_now or calculate_partial_hash_now:
+                    hash_ok = False; reasons.append("Hash (Cannot calc current)")
+                else: # Hash check wasn't actually enabled now, even though one was logged
+                    hash_ok = True # Pass the hash check if current config disables it
+                    reasons.append("Hash (Check Disabled Now)")
             else:
                 hash_ok = current_hash == logged_hash
                 if not hash_ok: reasons.append(f"Hash ({current_hash[:8]}... != {logged_hash[:8]}...)")
+        # --- END MODIFIED ---
+
         passed = size_ok and mtime_ok and hash_ok
         if passed: return True, "OK"
         else: return False, f"FAIL ({', '.join(reasons)})"
 
     def list_batches(self) -> List[Dict[str, Any]]:
+        # ... (no changes needed) ...
         if not self.is_enabled or not self.db_path or not self.db_path.exists():
             log.error("Cannot list batches: Undo disabled or DB not found.")
             return []
@@ -218,10 +286,9 @@ class UndoManager:
         except Exception as e: log.exception(f"Unexpected error listing undo batches: {e}")
         return batches
 
-    # --- MODIFIED: perform_undo Method ---
     def perform_undo(self, batch_id: str, dry_run: bool = False):
+        # ... (Undo logic, including the call to _check_file_integrity, remains the same) ...
         if not self.is_enabled:
-            # Use Console for user output if rich is available
             console = Console()
             console.print("[bold red]Error:[/bold red] Undo logging was not enabled or manager failed initialization.")
             return False
@@ -293,7 +360,6 @@ class UndoManager:
                 current_path_str = str(temp_p) if temp_p else f"[red]TEMP NOT FOUND for {new_p.name}[/red]"
                 target_path_str = str(orig_p)
                 action_desc = f"Rename Temp Back ({item_type})"
-                # Integrity check is not applicable here as temp file wasn't the original
                 integrity_msg = "N/A (Temp File)"
             elif status == 'created_dir':
                 current_path_str = str(orig_p) # The dir that was created
@@ -326,7 +392,6 @@ class UndoManager:
             return True
 
         try:
-            # Use rich's input for consistency if available
             confirm = console.input("Proceed with UNDO operation? ([bold green]y[/]/[bold red]N[/]): ").strip().lower()
             if confirm != 'y':
                 console.print("[yellow]Undo operation cancelled by user.[/yellow]");

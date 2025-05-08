@@ -1,10 +1,8 @@
---- requirements.txt
-
 # requirements.txt
 
 # Core Application Dependencies
 aiohttp>=3.9.0         # Asynchronous HTTP client (though we use executor for sync libs)
-guessit>=3.9.0         # For parsing filenames (check latest stable version)
+guessit>=3.8.0         # For parsing filenames (check latest stable version)
 python-dotenv>=1.0.0   # For loading .env files (API keys)
 pytomlpp>=1.0.13       # Fast TOML parser for config.toml
 Send2Trash>=1.8.0      # For moving files to trash (cross-platform)
@@ -13,20 +11,25 @@ pydantic>=2.0.0        # For data validation (if using Pydantic models)
 async_lru>=2.0.0       # For LRU caching async functions (if needed, manual cache used here)
 platformdirs>=4.2.0    # For cross-platform directory management
 pymediainfo>=6.0.0     # For reading media file metadata (check latest)
+chardet>=5.0.0         # For subtitle encoding detection (optional, check latest)
+langcodes>=3.0.0       # For subtitle language parsing (optional, check latest)
 
 # Metadata Provider Libraries (Choose based on what's actually used)
 rich>=13.0.0           # Enhanced terminal output (e.g., tables)
+tmdbv3api>=1.9.0       # TMDB API wrapper (check latest version) # <-- ADDED
+tvdb-v4-official>=1.0.0 # TVDB API wrapper (check latest version)
 
 # Optional Dependencies (Accuracy/Performance)
 # requests-cache>=1.0.0  # Not used directly if using diskcache/manual
 thefuzz>=0.19.0        # Fuzzy string matching
 python-Levenshtein>=0.20.0 # Optional, speeds up thefuzz
 
+# Testing Dependencies
 pytest>=8.0.0
 pytest-mock>=3.10.0
-# pytest-asyncio       # Only if you implement asyncio features later
-# ADD pytest-asyncio for testing these changes
-pytest-asyncio>=0.21.0
+pytest-asyncio>=0.21.0 # ADDED for testing async features
+
+# Other Optional Dependencies
 # aiosqlite            # Only if you implement asyncio features later
 # aiofiles             # Only if you implement asyncio features later
 # pyfakefs             # Optional, for advanced filesystem mocking

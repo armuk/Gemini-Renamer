@@ -26,9 +26,7 @@ def create_parser():
     parser_rename.add_argument("--processing-mode", choices=['auto', 'series', 'movie'], default=None, help="Force processing mode (overrides config).")
     parser_rename.add_argument("--use-metadata", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable metadata fetching (overrides config).")
     parser_rename.add_argument("--use-stream-info", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable extracting technical stream info (overrides config).")
-    # --- NEW ---
     parser_rename.add_argument("--preserve-mtime", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable preserving original file modification time (overrides config).")
-    # --- END NEW ---
     parser_rename.add_argument("--series-format", type=str, default=None, help="Series filename format string (overrides config).")
     parser_rename.add_argument("--movie-format", type=str, default=None, help="Movie filename format string (overrides config).")
     parser_rename.add_argument("--subtitle-format", type=str, default=None, help="Subtitle filename format string (overrides config).")
@@ -39,6 +37,7 @@ def create_parser():
     parser_rename.add_argument("--folder-format-movie", type=str, default=None, help="Folder format string for movies (overrides config).")
     parser_rename.add_argument("--interactive", "-i", action="store_true", default=False, help="Confirm each batch before live action.")
     parser_rename.add_argument("--enable-undo", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable undo logging (overrides config).")
+    parser_rename.add_argument("--undo-integrity-hash-full", action=argparse.BooleanOptionalAction, default=None, help="Calculate full file hash for undo log (SLOW, overrides config).")    
     parser_rename.add_argument("--log-file", type=str, default=None, help="Log file path (overrides config).")
     parser_rename.add_argument("--api-rate-limit-delay", type=float, default=None, help="Delay (sec) between API calls (overrides config).")
     parser_rename.add_argument("--scan-strategy", choices=['memory', 'low_memory'], default=None, help="Scanning strategy (overrides config).")
