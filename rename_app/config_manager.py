@@ -1,5 +1,3 @@
-# --- START OF FILE config_manager.py ---
-
 # rename_app/config_manager.py
 
 import os
@@ -25,47 +23,65 @@ DEFAULT_CONFIG_FILENAME = "config.toml"
 DEFAULT_DOTENV_FILENAME = ".env"
 
 class BaseProfileSettings(BaseModel):
+    # Core Settings
     recursive: Optional[bool] = None
-    processing_mode: Optional[str] = None
+    processing_mode: Optional[str] = None # 'auto', 'series', 'movie'
     use_metadata: Optional[bool] = None
+    extract_stream_info: Optional[bool] = Field(default=False) # Renamed from use_stream_info arg
+
+    # Format Strings
     series_format: Optional[str] = None
     movie_format: Optional[str] = None
     subtitle_format: Optional[str] = None
+    series_format_specials: Optional[str] = None # NEW: For S00 episodes filename
+    folder_format_series: Optional[str] = None
+    folder_format_movie: Optional[str] = None
+    folder_format_specials: Optional[str] = None # NEW: For S00 episodes folder path
+
+    # File Handling & Extensions
     video_extensions: Optional[List[str]] = None
     associated_extensions: Optional[List[str]] = None
     subtitle_extensions: Optional[List[str]] = None
-    on_conflict: Optional[str] = None
+    on_conflict: Optional[str] = None # 'skip', 'overwrite', 'suffix', 'fail'
     create_folders: Optional[bool] = None
-    folder_format_series: Optional[str] = None
-    folder_format_movie: Optional[str] = None
-    enable_undo: Optional[bool] = None
-    log_file: Optional[str] = None
-    log_level: Optional[str] = None
-    api_rate_limit_delay: Optional[float] = None
+    unknown_file_handling: Optional[str] = Field(default='skip') # 'skip', 'guessit_only', 'move_to_unknown'
+    unknown_files_dir: Optional[str] = Field(default='_unknown_files_')
+    scan_strategy: Optional[str] = Field(default='memory') # 'memory', 'low_memory'
+
+    # Scene Tags
     scene_tags_in_filename: Optional[bool] = None
     scene_tags_to_preserve: Optional[List[str]] = None
+
+    # Subtitles
     subtitle_encoding_detection: Optional[bool] = None
+
+    # API & Metadata Options
+    api_rate_limit_delay: Optional[float] = Field(None, ge=0.0)
     api_retry_attempts: Optional[int] = Field(None, ge=0)
     api_retry_wait_seconds: Optional[float] = Field(None, ge=0.0)
-    undo_db_path: Optional[str] = None
-    undo_expire_days: Optional[int] = Field(None, ge=-1)
-    undo_check_integrity: Optional[bool] = None
-    undo_integrity_hash_bytes: Optional[int] = Field(None, ge=0)
+    api_year_tolerance: Optional[int] = Field(default=1, ge=0)
+    tmdb_match_strategy: Optional[str] = Field(default='first') # 'first', 'fuzzy'
+    tmdb_match_fuzzy_cutoff: Optional[int] = Field(default=70, ge=0, le=100)
+    confirm_match_below: Optional[int] = Field(None, ge=0, le=100) # NEW: Fuzzy confidence threshold
+
+    # Caching Options
     cache_enabled: Optional[bool] = None
     cache_directory: Optional[str] = None
     cache_expire_seconds: Optional[int] = Field(None, ge=0)
-    scan_strategy: Optional[str] = Field(default='memory')
-    extract_stream_info: Optional[bool] = Field (default=False)
-    api_year_tolerance: Optional[int] = Field(default=1, ge=0)
-    tmdb_match_strategy: Optional[str] = Field(default='first')
-    tmdb_match_fuzzy_cutoff: Optional[int] = Field(default=70, ge=0, le=100)
 
-    # --- NEW: Unknown File Handling ---
-    unknown_file_handling: Optional[str] = Field(default='skip') # skip, guessit_only, move_to_unknown
-    unknown_files_dir: Optional[str] = Field(default='_unknown_files_') # Relative to target dir or absolute
-    # --- END NEW ---
+    # Undo Options
+    enable_undo: Optional[bool] = None
+    undo_db_path: Optional[str] = None
+    undo_expire_days: Optional[int] = Field(None, ge=-1) # -1 means never expire
+    undo_check_integrity: Optional[bool] = None
+    undo_integrity_hash_bytes: Optional[int] = Field(None, ge=0)
+
+    # Logging Options
+    log_file: Optional[str] = None
+    log_level: Optional[str] = None # 'DEBUG', 'INFO', 'WARNING', 'ERROR'
 
 
+    # --- Validators ---
     @field_validator('on_conflict', mode='before')
     @classmethod
     def check_on_conflict(cls, v):
@@ -101,14 +117,14 @@ class BaseProfileSettings(BaseModel):
             raise ValueError("extract_stream_info must be a boolean (true/false)")
         return v
 
-    # --- NEW: Validator for unknown_file_handling ---
     @field_validator('unknown_file_handling', mode='before')
     @classmethod
     def check_unknown_file_handling(cls, v):
         if v is not None and v.lower() not in ['skip', 'guessit_only', 'move_to_unknown']:
             raise ValueError("unknown_file_handling must be one of 'skip', 'guessit_only', 'move_to_unknown'")
         return v.lower() if v else 'skip' # Default to 'skip'
-    # --- END NEW ---
+
+    # Note: Validation for confirm_match_below (0-100) is handled by Field() directly.
 
 class DefaultSettings(BaseProfileSettings):
     pass
@@ -168,6 +184,7 @@ class ConfigManager:
         if not self.config_path or not self.config_path.is_file():
             log.warning(f"Config file not found at '{self.config_path}'. Using empty config.")
             self._raw_toml_content_str = "# Config file not found or empty.\n"
+            # Use model_dump() for Pydantic v2
             return RootConfigModel().model_dump()
         try:
             self._raw_toml_content_str = self.config_path.read_text(encoding='utf-8')
@@ -176,6 +193,7 @@ class ConfigManager:
             try:
                 validated_config = RootConfigModel.model_validate(cfg_dict)
                 log.debug("Config validation successful.")
+                # Use model_dump() for Pydantic v2, exclude_unset=False might be default
                 return validated_config.model_dump(exclude_unset=False)
             except ValidationError as e:
                 error_details = e.errors()
@@ -217,25 +235,40 @@ class ConfigManager:
         return keys
 
     def get_value(self, key, profile='default', command_line_value=None, default_value=None):
+        # Prioritize command line args
         if command_line_value is not None:
-            bool_optional_keys = {'recursive', 'use_metadata', 'create_folders', 'enable_undo',
-                                  'scene_tags_in_filename', 'subtitle_encoding_detection'}
+            # Special handling for BooleanOptionalAction where None means "not specified by user"
+            bool_optional_keys = {
+                'recursive', 'use_metadata', 'create_folders', 'enable_undo',
+                'scene_tags_in_filename', 'subtitle_encoding_detection', 'extract_stream_info' # Added extract_stream_info
+            }
+            # If it's a boolean optional key and the cmd line value is None, it means the user didn't specify it,
+            # so we should ignore it and proceed to check config/env/defaults.
             if key in bool_optional_keys and command_line_value is None:
-                pass
+                pass # Ignore command_line_value == None for these keys
             else:
+                 # For all other keys, or if the boolean optional key *was* specified (True/False), return it.
                 return command_line_value
+
+        # Check environment variables next (specifically for language for now)
         if key == 'tmdb_language' and self._api_keys.get('tmdb_language'):
              return self._api_keys['tmdb_language']
+
+        # Check specified profile in config
         profile_settings = self._config.get(profile, {})
         if profile_settings is not None and key in profile_settings:
              val = profile_settings[key]
              if val is not None:
                  return val
+
+        # Check default profile in config
         default_settings = self._config.get('default', {})
         if default_settings is not None and key in default_settings:
              val = default_settings[key]
              if val is not None:
                  return val
+
+        # Fallback to the hardcoded default_value passed to this function
         return default_value
 
     def get_api_key(self, service_name):
@@ -243,16 +276,20 @@ class ConfigManager:
         return self._api_keys.get(key_name)
 
     def get_profile_settings(self, profile='default'):
+        # Start with default settings
         settings = self._config.get('default', {}).copy()
+        # Merge specific profile settings if profile is not 'default' and exists
         if profile != 'default' and profile in self._config:
             profile_data = self._config.get(profile, {})
             if isinstance(profile_data, dict):
-                 settings.update(profile_data)
+                 # Merge, overwriting defaults with profile specifics
+                 settings.update({k: v for k, v in profile_data.items() if v is not None})
             else:
                  log.warning(f"Profile '{profile}' in config is not a dictionary. Skipping merge for this profile.")
         elif profile != 'default':
             log.debug(f"Profile '{profile}' not found in config. Using default settings only.")
         return settings
+
 
 class ConfigHelper:
     def __init__(self, config_manager: ConfigManager, args_ns: argparse.Namespace):
@@ -261,6 +298,7 @@ class ConfigHelper:
         self.profile = getattr(args_ns, 'profile', 'default') or 'default'
 
     def __call__(self, key, default_value=None, arg_value=None):
+         # If arg_value is explicitly provided (e.g., from args namespace), use it first
          cmd_line_val = getattr(self.args, key, None) if arg_value is None else arg_value
          return self.manager.get_value(key, self.profile, cmd_line_val, default_value)
 
@@ -268,17 +306,29 @@ class ConfigHelper:
         return self.manager.get_api_key(service_name)
 
     def get_list(self, key, default_value=None):
-        cmd_line_val = getattr(self.args, key, None)
-        val = self(key, default_value=default_value, arg_value=cmd_line_val)
-        if cmd_line_val is not None and isinstance(val, str):
-             return [item.strip() for item in val.split(',') if item.strip()]
-        elif isinstance(val, list):
+        # Handle comma-separated string from CLI args
+        cmd_line_val_str = getattr(self.args, key, None)
+        cmd_line_list = None
+        if isinstance(cmd_line_val_str, str):
+            cmd_line_list = [item.strip() for item in cmd_line_val_str.split(',') if item.strip()]
+
+        # Get value considering CLI, profile, default config, and function default
+        # Pass the *parsed list* from CLI if available
+        val = self(key, default_value=default_value, arg_value=cmd_line_list if cmd_line_list is not None else None)
+
+        # If the final value is a list, return it directly
+        if isinstance(val, list):
             return val
+        # If the final value came from config/default as a string (unlikely with Pydantic, but safeguard)
+        elif isinstance(val, str):
+             return [item.strip() for item in val.split(',') if item.strip()]
+        # Fallback to the provided default list or an empty list
         else:
             return default_value if isinstance(default_value, list) else []
 
+
 def interactive_api_setup(dotenv_path_override: Optional[Path] = None) -> bool:
-    # ... (interactive_api_setup unchanged) ...
+    # (interactive_api_setup unchanged)
     if dotenv_path_override:
         dotenv_path = dotenv_path_override.resolve()
     else:

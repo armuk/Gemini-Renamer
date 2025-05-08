@@ -9,6 +9,7 @@ class MediaMetadata:
     # Common fields
     source_api: Optional[str] = None # e.g., "tmdb", "tvdb"
     ids: Dict[str, Any] = field(default_factory=dict) # {'tmdb_id': 123, 'imdb_id': 'tt...', 'tvdb_id': 456}
+    match_confidence: Optional[float] = None # Score (e.g., 0.0-100.0) from fuzzy match, None if not applicable
 
     # Series specific
     is_series: bool = False # Flag for series
@@ -24,8 +25,6 @@ class MediaMetadata:
     movie_title: Optional[str] = None
     movie_year: Optional[int] = None
     release_date: Optional[str] = None
-
-    # --- NEW: Collection Info ---
     collection_name: Optional[str] = None
     collection_id: Optional[int] = None
 
@@ -65,6 +64,5 @@ class MediaInfo:
      # Combine relevant fields after processing for easier access
      file_type: str = 'unknown' # series, movie, unknown
      data: Dict[str, Any] = field(default_factory=dict) # Merged data for formatting
-     # --- NEW FIELD ---
-     metadata_error_message: Optional[str] = None # To store specific API error messages
-     # --- END NEW FIELD ---
+     # Store specific API error messages
+     metadata_error_message: Optional[str] = None
