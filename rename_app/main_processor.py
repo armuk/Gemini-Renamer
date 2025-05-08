@@ -221,10 +221,15 @@ class MainProcessor:
             if media_info.metadata.is_series:
                 title = media_info.metadata.show_title or "[missing]"
                 year = f"({media_info.metadata.show_year})" if media_info.metadata.show_year else ""
-                ep_num = media_info.episode_list[0] if media_info.episode_list else 0
-                ep_title = media_info.metadata.episode_titles.get(ep_num, "[missing]")
-                panel_content.append(f"[bold]Match:[/bold] {title} {year} - S{media_info.season:02d}E{ep_num:02d} - {ep_title}")
+                # --- CORRECTED ACCESS ---
+                ep_list = media_info.metadata.episode_list # Get list from metadata object
+                ep_num = ep_list[0] if ep_list else 0      # Safely get first episode number
+                ep_title = media_info.metadata.episode_titles.get(ep_num, "[missing]") # Use ep_num
+                season_num = media_info.metadata.season if media_info.metadata.season is not None else 0 # Use metadata season
+                panel_content.append(f"[bold]Match:[/bold] {title} {year} - S{season_num:02d}E{ep_num:02d} - {ep_title}")
+                # --- END CORRECTION ---
             elif media_info.metadata.is_movie:
+                # ... (movie display logic - likely correct) ...
                 title = media_info.metadata.movie_title or "[missing]"
                 year = f"({media_info.metadata.movie_year})" if media_info.metadata.movie_year else ""
                 panel_content.append(f"[bold]Match:[/bold] {title} {year}")
@@ -240,10 +245,14 @@ class MainProcessor:
         table.add_column("New")
 
         if plan.created_dir_path:
-             table.add_row("[dim]-[/dim]", "[dim]->[/dim]", f"[green]{plan.created_dir_path}[/green] [i](Create Dir)[/i]")
+             # Ensure path separators are displayed correctly (might not be needed depending on OS)
+             dir_path_str = str(plan.created_dir_path).replace("\\", "/")
+             table.add_row("[dim]-[/dim]", "[dim]->[/dim]", f"[green]{dir_path_str}[/green] [i](Create Dir)[/i]")
         for action_item in plan.actions:
              action_style = "blue" if action_item.action_type == 'move' else "default"
-             table.add_row(f"{action_item.original_path.name}", f"[{action_style}]->[/]", f"[{action_style}]{action_item.new_path}[/]")
+             # Ensure path separators are displayed correctly
+             new_path_str = str(action_item.new_path).replace("\\", "/")
+             table.add_row(f"{action_item.original_path.name}", f"[{action_style}]->[/]", f"[{action_style}]{new_path_str}[/]")
 
         panel_content.append(table)
         self.console.print(Panel("\n".join(str(c) for c in panel_content), title="[yellow]Confirm Batch Action", border_style="yellow"))
