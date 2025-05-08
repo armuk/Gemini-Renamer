@@ -18,30 +18,43 @@ def create_parser():
 
     subparsers = parser.add_subparsers(dest='command', required=True, help='Action to perform')
 
+    # --- Rename Subparser ---
     parser_rename = subparsers.add_parser('rename', help='Scan and rename files.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_rename.add_argument("directory", type=Path, help="Directory to process.")
     parser_rename.add_argument("--live", action="store_true", default=False, help="Perform live run (Default: dry run).")
-    parser_rename.add_argument("-r", "--recursive", action=argparse.BooleanOptionalAction, default=None, help="Process recursively.")
-    parser_rename.add_argument("--processing-mode", choices=['auto', 'series', 'movie'], default=None, help="Force processing mode.")
-    parser_rename.add_argument("--use-metadata", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable metadata.")
-    parser_rename.add_argument("--use-stream-info", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable extracting technical stream info.")
-    parser_rename.add_argument("--series-format", type=str, default=None, help="Series format string.")
-    parser_rename.add_argument("--movie-format", type=str, default=None, help="Movie format string.")
-    parser_rename.add_argument("--subtitle-format", type=str, default=None, help="Subtitle format string.")
-    parser_rename.add_argument("--extensions", type=str, default=None, help="Comma-separated video extensions.")
-    parser_rename.add_argument("--on-conflict", choices=['skip', 'overwrite', 'suffix', 'fail'], default=None, help="Action on filename conflict.")
-    parser_rename.add_argument("--create-folders", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable folder creation.")
-    parser_rename.add_argument("--folder-format-series", type=str, default=None, help="Folder format for series.")
-    parser_rename.add_argument("--folder-format-movie", type=str, default=None, help="Folder format for movies.")
-    parser_rename.add_argument("--interactive", action="store_true", default=False, help="Confirm each batch before live action.")
-    parser_rename.add_argument("--enable-undo", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable undo logging.")
-    parser_rename.add_argument("--log-file", type=str, default=None, help="Log file path.")
-    parser_rename.add_argument("--api-rate-limit-delay", type=float, default=None, help="Delay (sec) between API calls.")
-    parser_rename.add_argument("--scan-strategy", choices=['memory', 'low_memory'], default=None, help="Scanning strategy.")
-    parser_rename.add_argument("--scene-tags-in-filename", action=argparse.BooleanOptionalAction, default=None, help="Include scene tags.")
-    parser_rename.add_argument("--scene-tags-to-preserve", type=str, default=None, help="Comma-separated scene tags.")
-    parser_rename.add_argument("--subtitle-encoding-detection", action=argparse.BooleanOptionalAction, default=None, help="Detect subtitle encoding.")
-    # --- NEW: CLI args for unknown file handling (on rename command) ---
+    parser_rename.add_argument("-r", "--recursive", action=argparse.BooleanOptionalAction, default=None, help="Process recursively (overrides config).")
+    parser_rename.add_argument("--processing-mode", choices=['auto', 'series', 'movie'], default=None, help="Force processing mode (overrides config).")
+    parser_rename.add_argument("--use-metadata", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable metadata fetching (overrides config).")
+    parser_rename.add_argument("--use-stream-info", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable extracting technical stream info (overrides config).")
+    parser_rename.add_argument("--series-format", type=str, default=None, help="Series filename format string (overrides config).")
+    parser_rename.add_argument("--movie-format", type=str, default=None, help="Movie filename format string (overrides config).")
+    parser_rename.add_argument("--subtitle-format", type=str, default=None, help="Subtitle filename format string (overrides config).")
+    parser_rename.add_argument("--extensions", type=str, default=None, help="Comma-separated video+associated extensions (overrides config).")
+    parser_rename.add_argument("--on-conflict", choices=['skip', 'overwrite', 'suffix', 'fail'], default=None, help="Action on filename conflict (overrides config).")
+    parser_rename.add_argument("--create-folders", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable folder creation (overrides config).")
+    parser_rename.add_argument("--folder-format-series", type=str, default=None, help="Folder format string for series (overrides config).")
+    parser_rename.add_argument("--folder-format-movie", type=str, default=None, help="Folder format string for movies (overrides config).")
+    parser_rename.add_argument("--interactive", "-i", action="store_true", default=False, help="Confirm each batch before live action.")
+    parser_rename.add_argument("--enable-undo", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable undo logging (overrides config).")
+    parser_rename.add_argument("--log-file", type=str, default=None, help="Log file path (overrides config).")
+    parser_rename.add_argument("--api-rate-limit-delay", type=float, default=None, help="Delay (sec) between API calls (overrides config).")
+    parser_rename.add_argument("--scan-strategy", choices=['memory', 'low_memory'], default=None, help="Scanning strategy (overrides config).")
+    parser_rename.add_argument("--scene-tags-in-filename", action=argparse.BooleanOptionalAction, default=None, help="Include scene tags in filename (overrides config).")
+    parser_rename.add_argument("--scene-tags-to-preserve", type=str, default=None, help="Comma-separated scene tags to preserve (overrides config).")
+    parser_rename.add_argument("--subtitle-encoding-detection", action=argparse.BooleanOptionalAction, default=None, help="Detect subtitle encoding (overrides config).")
+
+    # --- NEW: Match Confidence Threshold ---
+    parser_rename.add_argument(
+        "--confirm-match-below",
+        type=int, # Use int for simplicity (0-100)
+        metavar="SCORE",
+        default=None, # Will be resolved by ConfigHelper using config or default None
+        choices=range(0, 101), # Restrict to sensible range 0-100
+        help="Interactively confirm metadata match if fuzzy score is below SCORE (0-100)."
+    )
+    # --- END NEW ---
+
+    # --- Unknown File Handling Args ---
     parser_rename.add_argument(
         "--unknown-file-handling",
         choices=['skip', 'guessit_only', 'move_to_unknown'],
@@ -54,12 +67,14 @@ def create_parser():
         default=None, # Will be resolved by ConfigHelper
         help="Directory for 'move_to_unknown' handling (relative to target or absolute, overrides config)."
     )
-    # --- END NEW ---
+
+    # --- Safety/Destination Args ---
     safety_group = parser_rename.add_mutually_exclusive_group()
     safety_group.add_argument("--backup-dir", type=Path, default=None, help="Backup originals before action.")
     safety_group.add_argument("--stage-dir", type=Path, default=None, help="Move files to staging dir.")
     safety_group.add_argument("--trash", action="store_true", default=False, help="Move originals to trash.")
 
+    # --- Undo Subparser ---
     parser_undo = subparsers.add_parser('undo', help='Revert rename operations or list batches.')
     parser_undo.add_argument(
         "batch_id", type=str, nargs='?', default=None,
@@ -73,10 +88,12 @@ def create_parser():
         "--dry-run", action="store_true",
         help="Show which files would be reverted for the given batch ID without taking action."
     )
+    # Allow overriding config for undo-specific settings if needed
     parser_undo.add_argument("--enable-undo", action=argparse.BooleanOptionalAction, default=None, help="Enable undo log for revert actions (rarely needed).")
     parser_undo.add_argument("--check-integrity", action=argparse.BooleanOptionalAction, default=None, help="Verify size/mtime before reverting.")
     parser_undo.add_argument("--log-file", type=str, default=None, help="Log file path for undo operation.")
 
+    # --- Config Subparser ---
     parser_config = subparsers.add_parser('config', help='Manage application configuration.')
     config_subparsers = parser_config.add_subparsers(dest='config_command', required=True, help='Configuration action to perform')
     parser_config_show = config_subparsers.add_parser('show', help='Show the currently loaded configuration.')
@@ -90,6 +107,7 @@ def create_parser():
     )
     parser_config_validate = config_subparsers.add_parser('validate', help='Validate the configuration file against the schema.')
 
+    # --- Setup Subparser ---
     parser_setup = subparsers.add_parser('setup', help='Interactively set up API keys and other initial configurations.')
     parser_setup.add_argument(
         "--dotenv-path", type=Path, default=None,
@@ -101,7 +119,9 @@ def create_parser():
 def parse_arguments(argv=None):
     parser = create_parser()
     args = parser.parse_args(argv)
+    # Ensure profile exists, default to 'default' if not present or None
     if not hasattr(args, 'profile') or args.profile is None:
         args.profile = 'default'
     return args
+
 # --- END OF FILE cli.py ---

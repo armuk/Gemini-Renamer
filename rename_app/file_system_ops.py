@@ -1,5 +1,3 @@
-# --- START OF FILE file_system_ops.py ---
-
 # rename_app/file_system_ops.py
 
 import logging
@@ -10,6 +8,27 @@ import argparse
 import sys
 import os # Keep os import for os.rename
 from typing import Dict, Callable, Set, Optional, Any
+
+# --- RICH Imports ---
+import builtins # Keep fallback
+try:
+    from rich.console import Console
+    from rich.table import Table
+    from rich.text import Text
+    RICH_AVAILABLE = True
+except ImportError:
+    RICH_AVAILABLE = False
+    # Minimal fallbacks if rich isn't available
+    class Console:
+        def print(self, *args, **kwargs): builtins.print(*args, **kwargs)
+    class Table:
+        def __init__(self, *args, **kwargs): pass
+        def add_column(self, *args, **kwargs): pass
+        def add_row(self, *args, **kwargs): pass
+    class Text:
+        def __init__(self, text="", style=""): self.text = text; self.style = style
+        def __str__(self): return self.text
+# --- End RICH Imports ---
 
 from .models import RenamePlan, RenameAction
 from .exceptions import FileOperationError, RenamerError
@@ -50,38 +69,131 @@ def perform_file_actions(plan: RenamePlan, run_batch_id: str, args_ns: argparse.
     action_messages = []
     batch_id = run_batch_id
     conflict_mode = cfg_helper('on_conflict', 'skip')
+    # Instantiate console for potential rich output
+    console = Console()
 
     # --- Dry Run ---
     if not getattr(args_ns, 'live', False): # Check the final 'live' status
-        # (Dry Run logic unchanged)
-        log.info(f"--- DRY RUN for Run ID: {batch_id} ---"); dry_run_messages = []
-        original_paths_in_plan_dry = {a.original_path.resolve() for a in plan.actions}; current_targets_dry: Set[Path] = set(); dry_run_conflict_error = False
-        if plan.created_dir_path and not plan.created_dir_path.exists(): dry_run_messages.append(f"DRY RUN: Would create directory '{plan.created_dir_path}'")
+        log.info(f"--- DRY RUN for Run ID: {batch_id} ---")
+        
+        dry_run_actions = [] # Store dicts for table rows
+        original_paths_in_plan_dry = {a.original_path.resolve() for a in plan.actions}
+        current_targets_dry: Set[Path] = set()
+        dry_run_conflict_error = False
+        
+        # Add planned directory creation first
+        if plan.created_dir_path and not plan.created_dir_path.exists():
+            dry_run_actions.append({
+                "original": Text("-", style="dim"),
+                "arrow": Text("->", style="dim"),
+                "new": Text(str(plan.created_dir_path), style="green"),
+                "action": Text("Create Dir", style="bold green"),
+                "status": Text("OK", style="green")
+            })
+        elif plan.created_dir_path:
+             dry_run_actions.append({
+                "original": Text("-", style="dim"),
+                "arrow": Text("->", style="dim"),
+                "new": Text(str(plan.created_dir_path), style="yellow"),
+                "action": Text("Create Dir", style="bold yellow"),
+                "status": Text("Exists", style="yellow")
+            })
+
+
         for action in plan.actions:
-            simulated_final_target = action.new_path.resolve(); target_exists_externally = (simulated_final_target.exists() and simulated_final_target not in original_paths_in_plan_dry) or simulated_final_target in current_targets_dry; conflict_msg = ""
+            simulated_final_target = action.new_path.resolve()
+            target_exists_externally = (simulated_final_target.exists() and simulated_final_target not in original_paths_in_plan_dry) or simulated_final_target in current_targets_dry
+            status_text = Text("OK", style="green")
+            action_text = Text(action.action_type.capitalize(), style="blue")
+            new_path_text = Text(str(action.new_path)) # Default style
+
+            # Check for potential long path issues (Windows)
             if sys.platform == 'win32' and len(str(simulated_final_target)) > WINDOWS_PATH_LENGTH_WARNING_THRESHOLD:
-                 conflict_msg += f" (WARNING: Potential long path >{WINDOWS_PATH_LENGTH_WARNING_THRESHOLD} chars)"
+                 status_text = Text(f"Long Path (> {WINDOWS_PATH_LENGTH_WARNING_THRESHOLD})", style="bold yellow")
+
             if target_exists_externally:
                 try:
-                    temp_conflict_mode = conflict_mode if conflict_mode != 'fail' else 'skip'; resolved_target_dry_sim = _handle_conflict(action.original_path, simulated_final_target, temp_conflict_mode)
-                    if resolved_target_dry_sim != simulated_final_target: conflict_msg += f" (WARNING: Target exists - mode: {conflict_mode} -> likely '{resolved_target_dry_sim.name}')"
-                    else: conflict_msg += f" (WARNING: Target exists - mode: {conflict_mode})";
-                    if conflict_mode == 'skip': conflict_msg += " - Action would be skipped.)"
-                    elif conflict_mode == 'overwrite': conflict_msg += " - Action would overwrite.)"
-                    else: conflict_msg += ")" # Close paren for suffix
-                    simulated_final_target = resolved_target_dry_sim
-                except FileOperationError as e_dry_skip:
-                     conflict_msg += f" (WARNING: Target exists - mode: skip - Action would be skipped.)"; simulated_final_target = None
-                except FileExistsError as e_dry_fail:
-                     conflict_msg += f" (ERROR: Target exists - mode: fail - Action would fail.)"; simulated_final_target = None; dry_run_conflict_error = True
-                except Exception as e_dry: conflict_msg += f" (ERROR during dry run check: {e_dry})"; simulated_final_target = None; dry_run_conflict_error = True
+                    temp_conflict_mode = conflict_mode if conflict_mode != 'fail' else 'skip'
+                    resolved_target_dry_sim = _handle_conflict(action.original_path, simulated_final_target, temp_conflict_mode)
+
+                    if resolved_target_dry_sim != simulated_final_target:
+                         status_text = Text(f"Conflict: Suffix -> '{resolved_target_dry_sim.name}'", style="yellow")
+                         new_path_text = Text(str(resolved_target_dry_sim), style="yellow") # Show suffixed name
+                    elif conflict_mode == 'skip':
+                         status_text = Text("Conflict: Skip", style="bold yellow")
+                         action_text = Text("Skip", style="bold yellow")
+                         new_path_text = Text(str(action.new_path), style="dim yellow")
+                    elif conflict_mode == 'overwrite':
+                         status_text = Text("Conflict: Overwrite", style="bold yellow")
+                         new_path_text = Text(str(action.new_path), style="yellow")
+                    
+                    simulated_final_target = resolved_target_dry_sim # Use resolved target for next check
+
+                except FileOperationError as e_dry_skip: # Explicitly handle skip error
+                     status_text = Text(f"Conflict: Skip ({e_dry_skip})", style="bold yellow")
+                     action_text = Text("Skip", style="bold yellow")
+                     new_path_text = Text(str(action.new_path), style="dim yellow")
+                     simulated_final_target = None
+                except FileExistsError as e_dry_fail: # Explicitly handle fail error
+                     status_text = Text(f"Conflict: Fail ({e_dry_fail})", style="bold red")
+                     action_text = Text("Fail", style="bold red")
+                     new_path_text = Text(str(action.new_path), style="dim red")
+                     simulated_final_target = None
+                     dry_run_conflict_error = True
+                except Exception as e_dry: # Catch other conflict resolution errors
+                     status_text = Text(f"Error ({e_dry})", style="bold red")
+                     simulated_final_target = None
+                     dry_run_conflict_error = True
+
+            # Check for internal conflicts (multiple sources to same final target)
             if simulated_final_target:
-                 if simulated_final_target in current_targets_dry: conflict_msg += " (ERROR: Multiple files map to same target!)"; simulated_final_target = None; dry_run_conflict_error=True
-                 else: current_targets_dry.add(simulated_final_target)
-            action_verb = action.action_type if action.action_type == 'move' else 'rename'; action_desc = f"{action_verb} '{action.original_path.name}' -> '{action.new_path}'{conflict_msg}"; dry_run_messages.append(f"DRY RUN: Would {action_desc}")
-        results['success'] = not dry_run_conflict_error; results['message'] = "\n".join(dry_run_messages) if dry_run_messages else "DRY RUN: No actions planned."; return results
+                 if simulated_final_target in current_targets_dry:
+                      status_text = Text("Conflict: Target Collision", style="bold red")
+                      action_text = Text("Fail", style="bold red")
+                      new_path_text = Text(str(action.new_path), style="dim red")
+                      dry_run_conflict_error=True
+                 else:
+                      current_targets_dry.add(simulated_final_target)
+
+            dry_run_actions.append({
+                "original": Text(str(action.original_path.name)),
+                "arrow": Text("->", style="dim" if action_text.plain != "Fail" else "red"),
+                "new": new_path_text,
+                "action": action_text,
+                "status": status_text
+            })
+
+        # --- Display the table ---
+        if dry_run_actions:
+            table = Table(title=f"Dry Run Plan - Batch ID (approx): {plan.batch_id[:15]}", show_header=True, header_style="bold magenta")
+            table.add_column("Original Name", style="dim cyan", no_wrap=True, min_width=20)
+            table.add_column(" ", justify="center", width=2) # Arrow column
+            table.add_column("New Path / Name", style="cyan", no_wrap=True, min_width=30)
+            table.add_column("Action", justify="center")
+            table.add_column("Status / Conflict", justify="left", min_width=15)
+
+            for item in dry_run_actions:
+                table.add_row(
+                    item["original"],
+                    item["arrow"],
+                    item["new"],
+                    item["action"],
+                    item["status"]
+                )
+            console.print(table)
+            # Store message for return, but primary output is the table
+            results['message'] = f"Dry Run plan displayed above ({len(dry_run_actions)} potential actions)." 
+        else:
+            results['message'] = "DRY RUN: No actions planned."
+            console.print(results['message'])
+
+
+        results['success'] = not dry_run_conflict_error
+        # We don't need to return the old message format, the table is the output
+        return results
 
     # --- Live Run ---
+    # ...(rest of the live run code remains unchanged)...
     log.info(f"--- LIVE RUN for Run ID: {batch_id} ---")
     action_type = 'rename'; original_to_temp_map: Dict[Path, Path] = {}; temp_to_final_map: Dict[Path, Path] = {}; resolved_target_map: Dict[Path, Path] = {}; created_dir: Optional[Path] = None
     # Determine effective action type based on args
@@ -95,6 +207,15 @@ def perform_file_actions(plan: RenamePlan, run_batch_id: str, args_ns: argparse.
             log.debug("Phase 0: Resolving final paths and checking conflicts...")
             current_targets: Set[Path] = set(); original_paths_in_plan: Set[Path] = {a.original_path.resolve() for a in plan.actions}
             for action in plan.actions:
+                # --- Add check for original path existence before resolving ---
+                if not action.original_path.exists():
+                    log.warning(f"Phase 0 Skip: Original file '{action.original_path.name}' not found before conflict check. Skipping this action.")
+                    # We need a way to signal this action should be skipped later.
+                    # For now, we won't add it to resolved_target_map.
+                    # The later loops already check for existence before acting.
+                    continue # Skip to the next action in Phase 0
+                # --- End Add ---
+
                 orig_p_resolved = action.original_path.resolve(); intended_final_p = action.new_path.resolve()
                 final_target_p = intended_final_p
                 # Check if target exists OUTSIDE the set of files being renamed in this plan
@@ -144,7 +265,10 @@ def perform_file_actions(plan: RenamePlan, run_batch_id: str, args_ns: argparse.
             log.info(f"Starting backup phase to {args_ns.backup_dir}...")
             for action in plan.actions:
                 orig_p = action.original_path
-                if not orig_p.exists(): log.warning(f"Cannot backup non-existent file: {orig_p}"); continue
+                # --- Check already exists here ---
+                if not orig_p.exists():
+                    log.warning(f"Cannot backup non-existent file: '{orig_p.name}'. Skipping backup for this file.")
+                    continue
                 backup_target = args_ns.backup_dir / orig_p.name
                 if sys.platform == 'win32' and len(str(backup_target.resolve())) > WINDOWS_PATH_LENGTH_WARNING_THRESHOLD:
                     log.warning(f"Potential long path issue on Windows for backup target: '{backup_target.resolve()}' (Length: {len(str(backup_target.resolve()))}).")
@@ -159,7 +283,10 @@ def perform_file_actions(plan: RenamePlan, run_batch_id: str, args_ns: argparse.
             log.info("Starting trash phase...")
             for action in plan.actions:
                 orig_p=action.original_path; final_p_intended = action.new_path
-                if not orig_p.exists(): log.warning(f"Cannot trash non-existent: {orig_p}"); continue
+                # --- Check already exists here ---
+                if not orig_p.exists():
+                    log.warning(f"Cannot trash non-existent file: '{orig_p.name}'. Skipping trash for this file.");
+                    continue
                 undo_manager.log_action(batch_id=batch_id, original_path=orig_p, new_path=final_p_intended, item_type='file', status='trashed')
                 send2trash.send2trash(str(orig_p)); action_messages.append(f"TRASHED: '{orig_p.name}' (intended: '{final_p_intended.name}')");
                 results['actions_taken'] += 1
@@ -168,7 +295,10 @@ def perform_file_actions(plan: RenamePlan, run_batch_id: str, args_ns: argparse.
             log.info(f"Starting staging phase to {args_ns.stage_dir}...")
             for action in plan.actions:
                 orig_p=action.original_path; final_p_intended=action.new_path
-                if not orig_p.exists(): log.warning(f"Cannot stage non-existent: {orig_p}"); continue
+                # --- Check already exists here ---
+                if not orig_p.exists():
+                    log.warning(f"Cannot stage non-existent file: '{orig_p.name}'. Skipping stage for this file.")
+                    continue
                 staged_path = args_ns.stage_dir / final_p_intended.name # Use intended name in stage dir
                 # Handle potential conflicts *within the staging directory*
                 final_staged_path = _handle_conflict(orig_p, staged_path, conflict_mode)
@@ -187,8 +317,19 @@ def perform_file_actions(plan: RenamePlan, run_batch_id: str, args_ns: argparse.
                 orig_p = action.original_path; orig_p_resolved = orig_p.resolve()
                 # Use resolved path from Phase 0 conflict check
                 final_p = resolved_target_map.get(orig_p_resolved)
-                if not final_p: log.error(f"P1 Skip: Missing resolved path for {orig_p}"); phase1_ok = False; break # Should not happen if Phase 0 passed
-                if not orig_p.exists(): log.warning(f"Cannot process non-existent P1: {orig_p}"); continue # Skip if source disappeared
+                # Check if skipped during phase 0 (e.g., original disappeared before check)
+                if not final_p:
+                     # Check if original path disappeared *after* Phase 0 but before move
+                     if not orig_p.exists():
+                         log.warning(f"P1 Skip: Original file '{orig_p.name}' missing before Phase 1 move.")
+                     else:
+                         log.error(f"P1 Skip: Missing resolved path for '{orig_p.name}' despite file existing (skipped in Phase 0?). Internal error?")
+                     continue # Skip this action
+
+                # --- Check original exists before move (redundant but safe) ---
+                if not orig_p.exists():
+                    log.warning(f"P1 Skip: Original file '{orig_p.name}' missing just before move to temp.")
+                    continue # Skip if source disappeared between Phase 0 and now
 
                 try:
                     # Generate unique temp name in the *final* target directory
@@ -212,13 +353,13 @@ def perform_file_actions(plan: RenamePlan, run_batch_id: str, args_ns: argparse.
 
             # Phase 1 Rollback
             if not phase1_ok:
-                 # (Rollback logic unchanged - moves temp back to original, updates undo log)
                  log.warning(f"Rolling back Phase 1 for run {batch_id} due to error during temp move...")
                  rollback_success_count = 0; rollback_fail_count = 0
                  for orig_p_res_rb, temp_p_rb in original_to_temp_map.items():
                      orig_p_rb = Path(orig_p_res_rb) # Recreate Path object
                      log.debug(f"Attempting rollback: '{temp_p_rb}' -> '{orig_p_rb}'")
                      try:
+                         # --- Check temp exists before rollback move ---
                          if temp_p_rb.exists():
                              # Use shutil.move for rollback consistency
                              shutil.move(str(temp_p_rb), str(orig_p_rb))
@@ -226,7 +367,10 @@ def perform_file_actions(plan: RenamePlan, run_batch_id: str, args_ns: argparse.
                                  log.info(f"Rollback successful: '{temp_p_rb.name}' -> '{orig_p_rb.name}'")
                              else: log.error(f"Rollback successful for '{orig_p_rb.name}', but failed to update undo status.")
                              rollback_success_count += 1
-                         else: log.warning(f"Rollback skipped for '{orig_p_rb.name}', temp file '{temp_p_rb}' not found.")
+                         else:
+                             log.warning(f"Rollback skipped for '{orig_p_rb.name}', temp file '{temp_p_rb}' not found (already rolled back or deleted?).")
+                             # Optionally try to update status anyway? Risky. Let's mark as failed.
+                             undo_manager.update_action_status(batch_id=batch_id, original_path=str(orig_p_rb), new_status='failed_pending')
                      except Exception as e_rb:
                          log.error(f"Rollback Error moving '{temp_p_rb.name}' to '{orig_p_rb.name}': {e_rb}")
                          rollback_fail_count += 1
@@ -256,8 +400,14 @@ def perform_file_actions(plan: RenamePlan, run_batch_id: str, args_ns: argparse.
 
                  try:
                      log.debug(f"Phase 2: Attempting move Temp '{temp_path}' -> Final '{final_path}'")
+                     # --- Check temp exists before final rename ---
                      if not temp_path.exists():
-                         log.error(f"P2 Error: Temp file {temp_path} not found! Cannot complete rename."); phase2_errors = True; continue # Critical error if temp file vanished
+                         log.error(f"P2 Error: Temp file {temp_path} not found! Cannot complete rename for original '{original_path_for_log.name if original_path_for_log else 'UNKNOWN'}'.")
+                         phase2_errors = True;
+                         # Attempt to mark the corresponding action as failed in undo log
+                         if original_path_for_log:
+                              undo_manager.update_action_status(batch_id=batch_id, original_path=str(original_path_for_log), new_status='failed_pending')
+                         continue # Critical error if temp file vanished
 
                      if final_path.exists() or final_path.is_symlink():
                           # This check should ideally be unnecessary due to Phase 0, but acts as a safeguard
@@ -340,13 +490,17 @@ def perform_file_actions(plan: RenamePlan, run_batch_id: str, args_ns: argparse.
                  orig_p_rb = Path(orig_p_res_rb)
                  log.debug(f"Attempting rollback (exception): '{temp_p_rb}' -> '{orig_p_rb}'")
                  try:
+                     # --- Check temp exists before rollback move ---
                      if temp_p_rb.exists():
                          shutil.move(str(temp_p_rb), str(orig_p_rb))
                          if undo_manager.update_action_status(batch_id=batch_id, original_path=str(orig_p_rb), new_status='failed_pending'):
                               log.info(f"Rollback successful (exception): '{temp_p_rb.name}' -> '{orig_p_rb.name}'")
                          else: log.error(f"Rollback successful (exception) for '{orig_p_rb.name}', but failed to update undo status.")
                          rollback_success_count += 1
-                     else: log.warning(f"Rollback skipped (exception) for '{orig_p_rb.name}', temp file '{temp_p_rb}' not found.")
+                     else:
+                         log.warning(f"Rollback skipped (exception) for '{orig_p_rb.name}', temp file '{temp_p_rb}' not found (already rolled back or deleted?).")
+                         # Mark status as failed here too
+                         undo_manager.update_action_status(batch_id=batch_id, original_path=str(orig_p_rb), new_status='failed_pending')
                  except Exception as e_rb:
                      log.error(f"Rollback Error (exception) moving '{temp_p_rb.name}' to '{orig_p_rb.name}': {e_rb}")
                      rollback_fail_count += 1
@@ -365,6 +519,6 @@ def perform_file_actions(plan: RenamePlan, run_batch_id: str, args_ns: argparse.
             action_messages.append(f"Unhandled Exception Rollback Summary: {rollback_success_count} succeeded, {rollback_fail_count} failed.")
 
     # --- Finalize results ---
-    results['message'] = "\n".join(action_messages)
+    # Combine action messages into a single string for the message field
+    results['message'] = "\n".join(action_messages) if action_messages else "Live run completed."
     return results
-# --- End file_system_ops.py ---
