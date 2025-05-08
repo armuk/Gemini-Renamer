@@ -5,7 +5,8 @@ import time
 import asyncio
 from functools import wraps, partial
 from pathlib import Path
-from typing import Optional, Tuple, TYPE_CHECKING, Any, Iterable, Sequence, Dict, cast, List
+from typing import Optional, Tuple, TYPE_CHECKING, Any, Iterable, Sequence, Dict, cast, List, Deque, Union
+from collections import deque
 
 # --- API Client Imports ---
 from .api_clients import get_tmdb_client, get_tvdb_client
@@ -1077,160 +1078,140 @@ class MetadataFetcher:
         return final_meta
 
     async def fetch_series_metadata(self, show_title_guess: str, season_num: int, episode_num_list: Tuple[int, ...], year_guess: Optional[int] = None) -> MediaMetadata:
-        """Fetches series metadata, trying TMDB first then TVDB if needed."""
-        # ... (This method remains the same as provided in the previous response) ...
+        """Fetches series metadata, trying sources based on configuration preference."""
         log.debug(f"Fetching series metadata (async) for: '{show_title_guess}' S{season_num}E{episode_num_list} (Year guess: {year_guess})")
         final_meta = MediaMetadata(is_series=True)
-        tmdb_show_data, tmdb_ep_map, tmdb_ids, tmdb_score = None, None, None, None
-        tvdb_show_data, tvdb_ep_map, tvdb_ids, tvdb_score = None, None, None, None
-        tmdb_error_message = None
-        tvdb_error_message = None
-
         lang = self.cfg('tmdb_language', 'en')
         episode_num_tuple = tuple(sorted(list(set(episode_num_list)))) # Ensure unique, sorted tuple
-        cache_key_base = f"series::{show_title_guess}_{season_num}_{episode_num_tuple}_{year_guess}_{lang}"
 
-        # --- Attempt TMDB ---
-        if self.tmdb:
-            tmdb_cache_key = cache_key_base + "::tmdb"
-            cached_tmdb = await self._get_cache(tmdb_cache_key)
-            if cached_tmdb:
+        source_preference: List[str] = self.cfg('series_metadata_preference', ['tmdb', 'tvdb'])
+        log.debug(f"Series metadata source preference order: {source_preference}")
+        source_queue: Deque[str] = deque(source_preference)
+
+        results_by_source: Dict[str, Dict[str, Any]] = {
+            'tmdb': {'data': None, 'ep_map': None, 'ids': None, 'score': None, 'error': None},
+            'tvdb': {'data': None, 'ep_map': None, 'ids': None, 'score': None, 'error': None}
+        }
+
+        primary_source: Optional[str] = None
+        merged_ids: Dict[str, Any] = {}
+
+        # --- Loop through preferred sources ---
+        while source_queue:
+            source = source_queue.popleft()
+            log.debug(f"Attempting fetch from source: {source.upper()}")
+            cache_key = f"series::{show_title_guess}_{season_num}_{episode_num_tuple}_{year_guess}_{lang}::{source}"
+            source_data, source_ep_map, source_ids, source_score = None, None, None, None
+
+            cached_data = await self._get_cache(cache_key)
+            if cached_data:
+                # ... (cache unpacking logic remains the same) ...
                 try:
-                    tmdb_show_data, cached_tmdb_ids, tmdb_score = cached_tmdb
-                    if cached_tmdb_ids and isinstance(cached_tmdb_ids, dict) and '_ep_map' in cached_tmdb_ids:
-                        tmdb_ep_map = cached_tmdb_ids.pop('_ep_map') # Extract ep_map
-                        tmdb_ids = cached_tmdb_ids # Remaining are IDs
-                    else: # Handle older cache format or missing ep_map
-                        tmdb_ids = cached_tmdb_ids if isinstance(cached_tmdb_ids, dict) else {}
-                        tmdb_ep_map = {}
-                    log.debug(f"Using cached TMDB data for series: '{show_title_guess}' S{season_num} (Score: {tmdb_score})")
+                    source_data, cached_ids, source_score = cached_data
+                    if cached_ids and isinstance(cached_ids, dict) and '_ep_map' in cached_ids:
+                        source_ep_map = cached_ids.pop('_ep_map', {})
+                        source_ids = cached_ids
+                    else:
+                        source_ids = cached_ids if isinstance(cached_ids, dict) else {}
+                        source_ep_map = {}
+                    log.debug(f"Using cached {source.upper()} data for series: '{show_title_guess}' S{season_num} (Score: {source_score})")
                 except (TypeError, ValueError, IndexError) as e_cache:
-                    log.warning(f"Error unpacking TMDB cache data for {tmdb_cache_key}, ignoring cache: {e_cache}")
-                    cached_tmdb = None # Invalidate cache on error
-                    tmdb_show_data, tmdb_ep_map, tmdb_ids, tmdb_score = None, None, None, None
-            else: # Not cached, fetch from API
+                    log.warning(f"Error unpacking {source.upper()} cache data for {cache_key}, ignoring cache: {e_cache}")
+                    cached_data = None
+                    source_data, source_ep_map, source_ids, source_score = None, None, None, None
+
+
+            if not cached_data:
                 try:
                     await self.rate_limiter.wait()
-                    tmdb_show_data, tmdb_ep_map, tmdb_ids, tmdb_score = await self._do_fetch_tmdb_series(
-                        show_title_guess, season_num, episode_num_tuple, year_guess, lang
-                    )
-                    # Only cache if fetch was successful (show data exists)
-                    if tmdb_show_data is not None:
-                        cacheable_tmdb_ids = tmdb_ids or {}
-                        # Store ep_map within the IDs dict for caching
-                        cacheable_tmdb_ids['_ep_map'] = tmdb_ep_map or {}
-                        await self._set_cache(tmdb_cache_key, (tmdb_show_data, cacheable_tmdb_ids, tmdb_score))
-                        # Remove ep_map from tmdb_ids *after* caching
-                        if '_ep_map' in cacheable_tmdb_ids:
-                            tmdb_ep_map = cacheable_tmdb_ids.pop('_ep_map')
-                            tmdb_ids = cacheable_tmdb_ids # Update tmdb_ids to exclude the map
+                    if source == 'tmdb' and self.tmdb:
+                        source_data, source_ep_map, source_ids, source_score = await self._do_fetch_tmdb_series(
+                            show_title_guess, season_num, episode_num_tuple, year_guess, lang
+                        )
+                    elif source == 'tvdb' and self.tvdb:
+                         # --- FIX: Safely get IDs from other source ---
+                         tmdb_result_dict = results_by_source.get('tmdb', {})
+                         tmdb_ids_dict = tmdb_result_dict.get('ids') if tmdb_result_dict else {}
+                         tvdb_id_from_other_source = tmdb_ids_dict.get('tvdb_id') if tmdb_ids_dict else None
+                         # --- END FIX ---
+                         source_data, source_ep_map, source_ids, source_score = await self._do_fetch_tvdb_series(
+                             title_arg=show_title_guess, season_num_arg=season_num, episodes_arg=episode_num_tuple,
+                             tvdb_id_arg=tvdb_id_from_other_source, year_guess_arg=year_guess, lang=lang
+                         )
+                    else:
+                        log.warning(f"{source.upper()} client not available, skipping fetch.")
+                        results_by_source[source]['error'] = f"{source.upper()} client not available."
+                        continue
+
+                    if source_data is not None:
+                        cacheable_ids = source_ids or {}
+                        cacheable_ids['_ep_map'] = source_ep_map or {}
+                        await self._set_cache(cache_key, (source_data, cacheable_ids, source_score))
+                        if '_ep_map' in cacheable_ids:
+                            source_ep_map = cacheable_ids.pop('_ep_map')
+                            source_ids = cacheable_ids
 
                 except MetadataError as me:
-                    log.error(f"TMDB series fetch failed: {me}"); tmdb_error_message = str(me)
-                    tmdb_show_data, tmdb_ep_map, tmdb_ids, tmdb_score = None, None, None, None
+                    log.error(f"{source.upper()} series fetch failed: {me}"); results_by_source[source]['error'] = str(me)
+                    source_data, source_ep_map, source_ids, source_score = None, None, None, None
                 except Exception as e:
-                    log.error(f"Unexpected error during TMDB series fetch for '{show_title_guess}' S{season_num}: {type(e).__name__}: {e}", exc_info=True); tmdb_error_message = f"Unexpected TMDB error: {e}"
-                    tmdb_show_data, tmdb_ep_map, tmdb_ids, tmdb_score = None, None, None, None
-        else:
-            log.warning("TMDB client not available, skipping TMDB series fetch.")
+                    log.error(f"Unexpected error during {source.upper()} series fetch for '{show_title_guess}' S{season_num}: {type(e).__name__}: {e}", exc_info=True); results_by_source[source]['error'] = f"Unexpected {source.upper()} error: {e}"
+                    source_data, source_ep_map, source_ids, source_score = None, None, None, None
 
-        # --- Determine if TVDB Fallback is Needed ---
-        tmdb_ep_map = tmdb_ep_map or {} # Ensure it's a dict
-        tmdb_has_all_requested_eps = not episode_num_tuple or all(ep_num in tmdb_ep_map for ep_num in episode_num_tuple)
-        needs_tvdb_fallback = (not tmdb_show_data) or (episode_num_tuple and not tmdb_has_all_requested_eps)
+            # Store results, ensuring dicts even if fetch failed
+            results_by_source[source]['data'] = source_data
+            results_by_source[source]['ep_map'] = source_ep_map or {}
+            results_by_source[source]['ids'] = source_ids or {}
+            results_by_source[source]['score'] = source_score
 
-        # --- Attempt TVDB (if needed and available) ---
-        if needs_tvdb_fallback and self.tvdb:
-            tvdb_cache_key = cache_key_base + "::tvdb"
-            cached_tvdb = await self._get_cache(tvdb_cache_key)
-            if cached_tvdb:
-                try:
-                    tvdb_show_data, cached_tvdb_ids, tvdb_score = cached_tvdb
-                    if cached_tvdb_ids and isinstance(cached_tvdb_ids, dict) and '_ep_map' in cached_tvdb_ids:
-                        tvdb_ep_map = cached_tvdb_ids.pop('_ep_map') # Extract ep_map
-                        tvdb_ids = cached_tvdb_ids # Remaining are IDs
-                    else: # Handle older cache format or missing ep_map
-                        tvdb_ids = cached_tvdb_ids if isinstance(cached_tvdb_ids, dict) else {}
-                        tvdb_ep_map = {}
-                    log.debug(f"Using cached TVDB data for series: '{show_title_guess}' S{season_num} (Score: {tvdb_score})")
-                except (TypeError, ValueError, IndexError) as e_cache:
-                    log.warning(f"Error unpacking TVDB cache data for {tvdb_cache_key}, ignoring cache: {e_cache}")
-                    cached_tvdb = None # Invalidate cache on error
-                    tvdb_show_data, tvdb_ep_map, tvdb_ids, tvdb_score = None, None, None, None
-            else: # Not cached, fetch from API
-                log.debug(f"Attempting TVDB fallback for '{show_title_guess}' S{season_num} (async)...")
-                tvdb_id_from_tmdb = tmdb_ids.get('tvdb_id') if tmdb_ids else None
-                try:
-                    await self.rate_limiter.wait()
-                    tvdb_show_data, tvdb_ep_map, tvdb_ids, tvdb_score = await self._do_fetch_tvdb_series(
-                        title_arg=show_title_guess, season_num_arg=season_num, episodes_arg=episode_num_tuple,
-                        tvdb_id_arg=tvdb_id_from_tmdb, year_guess_arg=year_guess, lang=lang
-                    )
-                     # Only cache if fetch was successful
-                    if tvdb_show_data is not None:
-                        cacheable_tvdb_ids = tvdb_ids or {}
-                        cacheable_tvdb_ids['_ep_map'] = tvdb_ep_map or {}
-                        await self._set_cache(tvdb_cache_key, (tvdb_show_data, cacheable_tvdb_ids, tvdb_score))
-                        # Remove ep_map from tvdb_ids *after* caching
-                        if '_ep_map' in cacheable_tvdb_ids:
-                             tvdb_ep_map = cacheable_tvdb_ids.pop('_ep_map')
-                             tvdb_ids = cacheable_tvdb_ids
+            # --- Check if this source is sufficient ---
+            source_has_show = results_by_source[source]['data'] is not None
+            source_has_all_eps = not episode_num_tuple or all(ep_num in results_by_source[source]['ep_map'] for ep_num in episode_num_tuple)
 
-                except MetadataError as me:
-                    log.error(f"TVDB series fetch failed: {me}"); tvdb_error_message = str(me)
-                    tvdb_show_data, tvdb_ep_map, tvdb_ids, tvdb_score = None, None, None, None
-                except Exception as e:
-                    log.error(f"Unexpected error during TVDB series fetch for '{show_title_guess}' S{season_num}: {type(e).__name__}: {e}", exc_info=True); tvdb_error_message = f"Unexpected TVDB error: {e}"
-                    tvdb_show_data, tvdb_ep_map, tvdb_ids, tvdb_score = None, None, None, None
-        elif needs_tvdb_fallback:
-            log.warning(f"TVDB client not available or fallback not triggered for '{show_title_guess}' S{season_num}, skipping TVDB series attempt.")
+            if source_has_show and source_has_all_eps:
+                log.info(f"Using {source.upper()} as primary source (found show and all requested episodes).")
+                primary_source = source
+                break
+            elif source_has_show:
+                log.warning(f"{source.upper()} found show data but is missing some requested episodes for S{season_num}. Will check next preferred source if available.")
+            else:
+                 log.info(f"{source.upper()} did not find show data. Will check next preferred source if available.")
+        # --- End loop through sources ---
 
-        # --- Select Primary Source and Merge Data ---
-        final_meta.source_api = None; primary_show_data = None; primary_ep_map = None; merged_ids = {}; primary_score = None; final_error_message = None
+        # --- Determine Final Primary Source ---
+        if not primary_source:
+            for source in source_preference:
+                 if results_by_source[source]['data'] is not None:
+                     log.warning(f"Using {source.upper()} as primary source (found show data, but possibly missing episodes as preferred source failed/was incomplete).")
+                     primary_source = source
+                     break
 
-        # Prioritize TMDB if it has the show and all requested episodes
-        if tmdb_show_data and tmdb_has_all_requested_eps:
-            log.debug(f"Using TMDB as primary source for '{show_title_guess}' S{season_num}.")
-            final_meta.source_api = "tmdb"
-            primary_show_data = tmdb_show_data
-            primary_ep_map = tmdb_ep_map
-            primary_score = tmdb_score
-            if tmdb_ids: merged_ids.update(tmdb_ids)
-            # Merge missing IDs from TVDB if available
-            if tvdb_ids:
-                 for k, v in tvdb_ids.items():
+        # --- Merge IDs from all sources ---
+        if primary_source:
+            primary_ids = results_by_source[primary_source].get('ids') or {}
+            merged_ids.update(primary_ids)
+
+        for source in source_preference:
+            if source != primary_source:
+                # Ensure other_ids is a dict before iterating
+                other_ids = results_by_source[source].get('ids') or {}
+                for k, v in other_ids.items():
                      if v is not None and k not in merged_ids: merged_ids[k] = v
-        # Fallback to TVDB if it was fetched successfully
-        elif tvdb_show_data:
-            log.debug(f"Using TVDB as primary source (fallback) for '{show_title_guess}' S{season_num}.")
-            final_meta.source_api = "tvdb"
-            primary_show_data = tvdb_show_data
-            primary_ep_map = tvdb_ep_map
-            primary_score = tvdb_score
-            # Merge all IDs, prioritizing TVDB's values if both sources provided the same key
-            if tmdb_ids: merged_ids.update(tmdb_ids)
-            if tvdb_ids: merged_ids.update(tvdb_ids) # TVDB overwrites common keys if present
-        # If TVDB failed but TMDB found the show (even if missing episodes), use TMDB
-        elif tmdb_show_data:
-            log.debug(f"Using TMDB (potentially incomplete episodes) as source for '{show_title_guess}' S{season_num}.")
-            final_meta.source_api = "tmdb"
-            primary_show_data = tmdb_show_data
-            primary_ep_map = tmdb_ep_map
-            primary_score = tmdb_score
-            if tmdb_ids: merged_ids.update(tmdb_ids)
-            # No TVDB data to merge here
 
-        # --- Populate Final Metadata Object ---
-        final_meta.ids = merged_ids # Use the merged IDs
-        final_meta.match_confidence = primary_score
+        # --- Populate Final Metadata ---
+        # ... (Rest of population and failure handling remains the same) ...
+        if primary_source:
+            final_meta.source_api = primary_source
+            primary_show_data = results_by_source[primary_source]['data']
+            primary_ep_map = results_by_source[primary_source]['ep_map']
+            final_meta.match_confidence = results_by_source[primary_source]['score']
+            final_meta.ids = merged_ids
 
-        if primary_show_data:
             try: # Wrap population in try-except
                 # Handle AsObj or dict
                 show_title_api = getattr(primary_show_data, 'name', None) if isinstance(primary_show_data, AsObj) else primary_show_data.get('name')
                 final_meta.show_title = show_title_api
 
-                # Get air date (handle different possible keys)
                 show_air_date = None
                 if isinstance(primary_show_data, AsObj): show_air_date = getattr(primary_show_data, 'first_air_date', None)
                 elif isinstance(primary_show_data, dict): show_air_date = primary_show_data.get('firstAired') or primary_show_data.get('first_air_date')
@@ -1239,13 +1220,11 @@ class MetadataFetcher:
                 final_meta.season = season_num
                 final_meta.episode_list = list(episode_num_tuple)
 
-                # Populate episode details from the chosen primary source's map
-                primary_ep_map = primary_ep_map or {} # Ensure dict
+                # Populate episode details from the primary source's map
                 if episode_num_tuple:
                     for ep_num in episode_num_tuple:
                         ep_details = primary_ep_map.get(ep_num)
                         if ep_details:
-                            # Handle AsObj or dict for episode details
                             ep_title = None; air_date = None
                             if isinstance(ep_details, AsObj):
                                 ep_title = getattr(ep_details, 'name', None)
@@ -1257,26 +1236,27 @@ class MetadataFetcher:
                             if ep_title: final_meta.episode_titles[ep_num] = str(ep_title)
                             if air_date: final_meta.air_dates[ep_num] = str(air_date)
                         else:
-                            log.debug(f"Episode S{season_num}E{ep_num} not found in selected API map for '{show_title_guess}'.")
+                            log.debug(f"Episode S{season_num}E{ep_num} not found in selected primary source map ({primary_source}).")
 
             except Exception as e_populate:
-                 log.error(f"Error populating final_meta for series '{show_title_guess}': {e_populate}", exc_info=True);
+                 log.error(f"Error populating final_meta for series '{show_title_guess}' from {primary_source}: {e_populate}", exc_info=True);
                  final_meta.source_api = None # Mark as failed
-                 # Preserve original fetch error message if it exists
-                 final_error_message = tmdb_error_message or tvdb_error_message or f"Error processing API data: {e_populate}"
+                 final_error_message = f"Error processing {primary_source} data: {e_populate}" # Use the specific error
+        else:
+            # If no primary source could be determined after trying all preferences
+            log.warning(f"Could not determine a primary metadata source for series: '{show_title_guess}' S{season_num}E{episode_num_tuple}.")
+            tmdb_err = results_by_source['tmdb'].get('error')
+            tvdb_err = results_by_source['tvdb'].get('error')
+            if tmdb_err and tvdb_err: final_error_message = f"TMDB Error: {tmdb_err} | TVDB Error: {tvdb_err}"
+            elif tmdb_err: final_error_message = f"TMDB Error: {tmdb_err}"
+            elif tvdb_err: final_error_message = f"TVDB Error: {tvdb_err}"
+            else: final_error_message = "Metadata fetch failed from all sources or data invalid."
 
         # --- Handle Final Failure State ---
         if not final_meta.source_api:
-             if not final_error_message: # Combine API fetch errors if population was ok but sources failed
-                 if tmdb_error_message and tvdb_error_message: final_error_message = f"TMDB Error: {tmdb_error_message} | TVDB Error: {tvdb_error_message}"
-                 elif tmdb_error_message: final_error_message = f"TMDB Error: {tmdb_error_message}"
-                 elif tvdb_error_message: final_error_message = f"TVDB Error: {tvdb_error_message}"
-                 else: final_error_message = "Metadata fetch failed from all sources or data invalid."
-             log.warning(f"Metadata fetch/population failed for series: '{show_title_guess}' S{season_num}E{episode_num_tuple}. Reason: {final_error_message}")
-             # Set fallbacks
+             log.warning(f"Metadata fetch/population ultimately failed for series: '{show_title_guess}' S{season_num}E{episode_num_tuple}. Reason: {final_error_message}")
              if not final_meta.show_title: final_meta.show_title = show_title_guess
              if not final_meta.show_year: final_meta.show_year = year_guess
-             # Raise the consolidated error message
              raise MetadataError(final_error_message)
         elif not final_meta.show_title:
              final_meta.show_title = show_title_guess # Ensure title exists even if API returned None/empty

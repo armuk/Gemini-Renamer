@@ -4,7 +4,7 @@ import os
 import pytomlpp
 import logging
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Set
+from typing import Optional, List, Dict, Any, Set, Union
 
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
@@ -66,6 +66,7 @@ class BaseProfileSettings(BaseModel):
     tmdb_match_strategy: Optional[str] = Field(default='first')
     tmdb_match_fuzzy_cutoff: Optional[int] = Field(default=70, ge=0, le=100)
     confirm_match_below: Optional[int] = Field(None, ge=0, le=100)
+    series_metadata_preference: Optional[List[str]] = Field(default=['tmdb', 'tvdb'], description="Preferred metadata source order for series (e.g., ['tmdb', 'tvdb'] or ['tvdb', 'tmdb']).")
 
     # Caching Options
     cache_enabled: Optional[bool] = None
@@ -128,6 +129,24 @@ class BaseProfileSettings(BaseModel):
             raise ValueError("unknown_file_handling must be one of 'skip', 'guessit_only', 'move_to_unknown'")
         return v.lower() if v else 'skip'
 
+    @field_validator('series_metadata_preference', mode='before')
+    @classmethod
+    def check_series_metadata_preference(cls, v):
+        if v is None:
+            return ['tmdb', 'tvdb'] # Default if explicitly set to null
+        if isinstance(v, str): # Allow comma-separated string input from args
+            v = [item.strip().lower() for item in v.split(',') if item.strip()]
+        if not isinstance(v, list):
+            raise ValueError("series_metadata_preference must be a list (e.g., ['tmdb', 'tvdb'])")
+        if len(v) != 2:
+            raise ValueError("series_metadata_preference must contain exactly two sources")
+        sources = {s.lower() for s in v}
+        allowed = {'tmdb', 'tvdb'}
+        if sources != allowed:
+            raise ValueError(f"series_metadata_preference must contain 'tmdb' and 'tvdb', got: {v}")
+        # Return the validated list, ensuring lowercase
+        return [s.lower() for s in v]
+
     @field_validator('preserve_mtime', mode='before')
     @classmethod
     def check_preserve_mtime(cls, v):
@@ -151,7 +170,6 @@ class RootConfigModel(BaseModel):
 
 
 class ConfigManager:
-    # (... rest of ConfigManager class remains the same ...)
     def __init__(self, config_path=None):
         self.config_path = self._resolve_config_path(config_path)
         self._raw_toml_content_str: Optional[str] = None
@@ -256,36 +274,66 @@ class ConfigManager:
                 'recursive', 'use_metadata', 'create_folders', 'enable_undo',
                 'scene_tags_in_filename', 'subtitle_encoding_detection',
                 'extract_stream_info', 'preserve_mtime',
-                'undo_integrity_hash_full' # <-- ADDED
+                'undo_integrity_hash_full'
             }
             if key in bool_optional_keys and command_line_value is None:
                  pass # Don't return None for BooleanOptionalAction if it wasn't specified
             else:
-                 return command_line_value
-        # ... rest of get_value remains the same ...
+                if key == 'series_metadata_preference' and isinstance(command_line_value, str):
+                    validated_list = [item.strip().lower() for item in command_line_value.split(',') if item.strip()]
+                    # Basic validation, more thorough is in Pydantic model
+                    if len(validated_list) == 2 and set(validated_list) == {'tmdb', 'tvdb'}:
+                        return validated_list
+                    else:
+                        log.warning(f"Invalid command-line value for {key}: '{command_line_value}'. Ignoring.")
+                        # Fall through to config/defaults by *not* returning here
+                else:
+                    return command_line_value
+
         if key == 'tmdb_language' and self._api_keys.get('tmdb_language'):
              return self._api_keys['tmdb_language']
 
+        # Check specific profile in config
         profile_settings = self._config.get(profile, {})
         if profile_settings is not None and key in profile_settings:
-             val = profile_settings[key]
-             if val is not None:
-                 return val
+            val = profile_settings[key]
+            if val is not None:
+                # Validate list preference from config if needed
+                if key == 'series_metadata_preference':
+                    if isinstance(val, list) and len(val) == 2 and set(s.lower() for s in val) == {'tmdb', 'tvdb'}:
+                        return [s.lower() for s in val]
+                    else:
+                        log.warning(f"Invalid config value for {key} in profile '{profile}'. Using default.")
+                        # Fall through to default profile/model default
+                else:
+                    return val
 
+        # Check default profile in config
         default_settings = self._config.get('default', {})
         if default_settings is not None and key in default_settings:
-             val = default_settings[key]
-             if val is not None:
-                 return val
+            val = default_settings[key]
+            if val is not None:
+                # Validate list preference from config if needed
+                if key == 'series_metadata_preference':
+                    if isinstance(val, list) and len(val) == 2 and set(s.lower() for s in val) == {'tmdb', 'tvdb'}:
+                        return [s.lower() for s in val]
+                    else:
+                        log.warning(f"Invalid config value for {key} in profile 'default'. Using model default.")
+                        # Fall through to model default
+                else:
+                    return val
 
         model_default = None
         if profile == 'default' and hasattr(DefaultSettings, 'model_fields') and key in DefaultSettings.model_fields:
             model_default = DefaultSettings.model_fields[key].default
         elif hasattr(BaseProfileSettings, 'model_fields') and key in BaseProfileSettings.model_fields:
-             model_default = BaseProfileSettings.model_fields[key].default
+            model_default = BaseProfileSettings.model_fields[key].default
 
         if model_default is not None:
-             return model_default
+             # Ensure the default list is returned correctly
+            if key == 'series_metadata_preference' and isinstance(model_default, list):
+                return model_default[:] # Return a copy
+            return model_default
 
         return default_value
 
@@ -314,25 +362,38 @@ class ConfigHelper:
         self.profile = getattr(args_ns, 'profile', 'default') or 'default'
 
     def __call__(self, key, default_value=None, arg_value=None):
-         cmd_line_val = getattr(self.args, key, None) if arg_value is None else arg_value
-         return self.manager.get_value(key, self.profile, cmd_line_val, default_value)
+         # Prioritize explicitly passed arg_value if present
+        if arg_value is not None:
+            cmd_line_val = arg_value
+        else:
+            cmd_line_val = getattr(self.args, key, None)
+
+        # Let ConfigManager handle merging and validation logic
+        return self.manager.get_value(key, self.profile, cmd_line_val, default_value)
 
     def get_api_key(self, service_name):
         return self.manager.get_api_key(service_name)
 
     def get_list(self, key, default_value=None):
+        # Handle comma-separated string from command line if present
         cmd_line_val_str = getattr(self.args, key, None)
         cmd_line_list = None
         if isinstance(cmd_line_val_str, str):
             cmd_line_list = [item.strip() for item in cmd_line_val_str.split(',') if item.strip()]
-        val = self(key, default_value=default_value, arg_value=cmd_line_list if cmd_line_list is not None else None)
+
+        # Get the value using the standard mechanism, passing the potentially parsed list
+        # ConfigManager.get_value will handle validation if it's the preference key
+        val = self(key, default_value=default_value, arg_value=cmd_line_list)
+
+        # Ensure the final result is a list
         if isinstance(val, list):
             return val
+        # This string split fallback is less likely needed now with better get_value handling
         elif isinstance(val, str):
-             return [item.strip() for item in val.split(',') if item.strip()]
+            return [item.strip() for item in val.split(',') if item.strip()]
         else:
+            # Return the original default if it was a list, otherwise empty list
             return default_value if isinstance(default_value, list) else []
-
 
 # (... interactive_api_setup unchanged ...)
 def interactive_api_setup(dotenv_path_override: Optional[Path] = None) -> bool:

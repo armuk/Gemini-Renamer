@@ -26,6 +26,9 @@ associated_extensions = [".srt", ".sub", ".ssa", ".ass", ".vtt", ".nfo", ".jpg",
 unknown_file_handling = "move_to_unknown"  # or "guessit_only" or "skip"
 unknown_files_dir = "_unknown_files_"
 
+series_metadata_preference = ["tmdb", "tvdb"]
+
+
 # List of exact directory names to completely ignore during scanning.
 # Useful for system folders, temporary download folders, etc. Case-sensitive.
 # ignore_dirs = [".git", ".vscode", "@eaDir", "lost+found", "_temp_downloads"]
