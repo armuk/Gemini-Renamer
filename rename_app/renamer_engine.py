@@ -20,7 +20,7 @@ except ImportError: GUESSIT_AVAILABLE = False
 
 log = logging.getLogger(__name__)
 
-# (sanitize_os_chars function unchanged)
+# (sanitize_os_chars should be defined elsewhere or imported if needed globally)
 # ...
 
 class RenamerEngine:
@@ -28,25 +28,23 @@ class RenamerEngine:
     def __init__(self, cfg_helper): self.cfg = cfg_helper
 
     def parse_filename(self, file_path: Path) -> Dict:
-        # ... (unchanged) ...
         if not GUESSIT_AVAILABLE: log.error("Guessit library not available."); return {}
         try: guess = guessit(str(file_path)); log.debug(f"Guessit: {guess}"); return guess
         except Exception as e: log.error(f"Guessit failed: {e}"); return {} # Return empty dict on failure
 
     def _determine_file_type(self, guess_info: Dict) -> str:
-        # ... (unchanged) ...
         if not isinstance(guess_info, dict):
             log.warning(f"Cannot determine file type, guess_info is not a dictionary: {type(guess_info)}")
             return 'unknown'
         file_type = guess_info.get('type');
         if file_type == 'episode': return 'series'
         if file_type == 'movie': return 'movie'
-        if 'season' in guess_info and 'episode' in guess_info: return 'series'
-        if guess_info.get('year') and 'title' in guess_info: return 'movie'
+        # Fallback checks based on common keys
+        if 'season' in guess_info and ('episode' in guess_info or 'episode_list' in guess_info): return 'series'
+        if guess_info.get('year') and 'title' in guess_info and file_type != 'episode': return 'movie' # Avoid classifying series as movies just based on year/title
         log.debug(f"Could not determine type from guess: {guess_info}"); return 'unknown'
 
     def _prepare_format_data(self, media_info: MediaInfo) -> Dict[str, Any]:
-        # ... (unchanged) ...
         if not isinstance(media_info.guess_info, dict):
             log.error(f"Cannot prepare format data for '{media_info.original_path.name}'. "
                       f"Expected guess_info to be a dict, but got {type(media_info.guess_info)}. "
@@ -69,8 +67,8 @@ class RenamerEngine:
                 'episode_title': 'Unknown Episode',
                 'scene_tags': [],
                 'scene_tags_dot': '',
-                'resolution': '',
-                'vcodec': '', # Use consistent vcodec key
+                'resolution': '', # Ensure stream info keys exist even if not populated
+                'vcodec': '',
                 'acodec': '',
                 'achannels': '',
                 'collection': '',
@@ -114,9 +112,7 @@ class RenamerEngine:
              # Series specific metadata overwrite/population
             if metadata.is_series:
                 show_title_raw = metadata.show_title if metadata.show_title else data.get('title', 'Unknown_Show')
-                # --- Apply OS Char Sanitation ---
                 data['show_title'] = sanitize_os_chars(show_title_raw) if show_title_raw else 'Unknown_Show'
-                # --- End Sanitation ---
                 data['show_year'] = metadata.show_year
                 data['season'] = metadata.season if metadata.season is not None else data.get('season', 0) # Ensure season is int
                 data['episode_list'] = metadata.episode_list or data.get('episode_list', [])
@@ -124,18 +120,14 @@ class RenamerEngine:
                 if len(ep_list) > 1:
                     data['episode_range'] = f"E{ep_list[0]:0>2}-E{ep_list[-1]:0>2}"
                     titles_raw = [metadata.episode_titles.get(ep, f'Ep_{ep}') for ep in ep_list]
-                    # --- Apply OS Char Sanitation ---
                     titles = [sanitize_os_chars(t) if t else f'Ep_{ep}' for ep, t in zip(ep_list, titles_raw)]
-                     # --- End Sanitation ---
                     specific_titles = [t for t in titles if not t.startswith("Ep_")]
                     data['episode_title'] = " & ".join(specific_titles if specific_titles else titles[:1])
-                    data['episode'] = ep_list[0]
+                    data['episode'] = ep_list[0] # Use first episode number for {episode} placeholder
                 elif ep_list:
                     data['episode'] = ep_list[0]
                     ep_title_meta = metadata.episode_titles.get(data['episode'])
-                     # --- Apply OS Char Sanitation ---
                     data['episode_title'] = sanitize_os_chars(ep_title_meta) if ep_title_meta else data.get('episode_title', f"Episode_{data['episode']}")
-                    # --- End Sanitation ---
                 else: # Handle case where episode_list is empty but was series type
                     data['episode'] = data.get('episode', 0)
                     data['episode_title'] = data.get('episode_title', 'Unknown Episode')
@@ -144,15 +136,12 @@ class RenamerEngine:
             # Movie specific metadata overwrite/population
             elif metadata.is_movie:
                 movie_title_raw = metadata.movie_title if metadata.movie_title else data.get('title', 'Unknown_Movie')
-                # --- Apply OS Char Sanitation ---
                 data['movie_title'] = sanitize_os_chars(movie_title_raw) if movie_title_raw else 'Unknown_Movie'
-                # --- End Sanitation ---
                 data['movie_year'] = metadata.movie_year or data.get('year')
                 data['release_date'] = metadata.release_date
 
         # --- Fallbacks for non-metadata cases ---
         # Ensure essential keys have *some* value after potential metadata merge
-        # Use sanitize_os_chars on titles derived from guessit if no metadata provided one
         if 'show_title' not in data:
             show_title_guess = data.get('title', 'Unknown Show')
             data['show_title'] = sanitize_os_chars(show_title_guess) if show_title_guess else 'Unknown Show'
@@ -163,40 +152,82 @@ class RenamerEngine:
             ep_title_guess = data.get('episode_title', f"Episode_{data.get('episode', 0)}")
             data['episode_title'] = sanitize_os_chars(ep_title_guess) if ep_title_guess else f"Episode_{data.get('episode', 0)}"
         data.setdefault('season', 0)
-        data.setdefault('episode', 0)
-        data.setdefault('episode_list', [data['episode']])
+        data.setdefault('episode', data.get('episode_number', 0)) # Prefer guessit's episode_number if available
+        if 'episode_list' not in data: data['episode_list'] = [data['episode']] # Ensure episode_list exists
         data.setdefault('movie_year', data.get('year'))
         data.setdefault('show_year', data.get('year'))
         if len(data['episode_list']) > 1 and 'episode_range' not in data:
-            ep_list = sorted(data['episode_list'])
+            ep_list = sorted([ep for ep in data['episode_list'] if isinstance(ep, int)]) # Ensure ints
             if ep_list: data['episode_range'] = f"E{ep_list[0]:0>2}-E{ep_list[-1]:0>2}"
 
 
-        # Extract Stream Info
-        # Add defaults first in case extraction fails or is disabled
+        # --- Selective Stream Info Extraction ---
+        stream_info_enabled = self.cfg('extract_stream_info', False)
+        should_extract_streams = False # Default to False
+
+        if stream_info_enabled:
+            log.debug("Stream info extraction enabled by config. Checking format strings...")
+            stream_placeholders = {"{resolution}", "{vcodec}", "{acodec}", "{achannels}"}
+            # Get all potentially relevant format strings using current config context
+            # Use the 'media_info.file_type' to determine which formats are most relevant
+            relevant_formats = []
+            if media_info.file_type == 'series':
+                 relevant_formats.extend([
+                     self.cfg('series_format'),
+                     self.cfg('series_format_specials'),
+                     self.cfg('folder_format_series'),
+                     self.cfg('folder_format_specials')
+                 ])
+            elif media_info.file_type == 'movie':
+                 relevant_formats.extend([
+                     self.cfg('movie_format'),
+                     self.cfg('folder_format_movie')
+                 ])
+            # Always check subtitle format as it *could* theoretically use stream info, though unlikely
+            relevant_formats.append(self.cfg('subtitle_format'))
+
+            # Filter out None values and check for placeholders
+            formats_to_check = [f for f in relevant_formats if f] # Ensure strings
+
+            for fmt in formats_to_check:
+                if any(ph in fmt for ph in stream_placeholders):
+                    should_extract_streams = True
+                    log.debug(f"Found stream placeholder in format: '{fmt}'. Extraction needed for '{original_path.name}'.")
+                    break # Found one, no need to check others
+
+            if not should_extract_streams:
+                log.debug(f"No stream info placeholders found in relevant format strings for '{original_path.name}'. Skipping extraction.")
+        else:
+             log.debug("Stream info extraction disabled by config.")
+
+
+        # Initialize stream info keys in data dict regardless
         data['resolution'] = ''
         data['vcodec'] = ''
         data['acodec'] = ''
         data['achannels'] = ''
-        if self.cfg('extract_stream_info', False): # Check config
+
+        if should_extract_streams: # <-- Use the calculated flag
+            log.debug(f"Proceeding with stream info extraction for {original_path.name}")
             try:
                 stream_info = extract_stream_info(original_path) # Call util function
-                # Update data dict, only overwriting if util returned non-None value
                 if stream_info:
+                    # Update data dict, only overwriting if util returned non-empty value
                     for key, value in stream_info.items():
-                        if value is not None:
+                        if value: # Check if the value from pymediainfo is truthy (not None or empty string)
                             data[key] = value
             except Exception as e_stream:
                 log.error(f"Failed to extract stream info for {original_path.name}: {e_stream}")
-        # --- END Extract Stream Info ---
+        # --- END Selective Stream Info Extraction ---
 
-        # Add remaining guessit keys if not already set
+        # Add remaining guessit keys if not already set (safer at the end)
         for gk, gv in media_info.guess_info.items():
             data.setdefault(gk, gv)
 
         log.debug(f"Prepared format data: {data}")
         return data
 
+    # (... rest of RenamerEngine class: _format_new_name, _format_folder_path, _format_associated_name, plan_rename ...)
     def _format_new_name(self, media_info: MediaInfo, format_data: Dict) -> str:
         mode = media_info.file_type
         format_str = None
@@ -227,6 +258,7 @@ class RenamerEngine:
             format_str = fallback_format
 
         try:
+            # Use defaultdict to avoid KeyErrors for missing placeholders
             new_stem = format_str.format(**defaultdict(str, format_data))
         except Exception as e:
             raise RenamerError(f"Failed formatting stem: {e}. Format='{format_str}', DataKeys={list(format_data.keys())}") from e
@@ -235,10 +267,14 @@ class RenamerEngine:
         if self.cfg('scene_tags_in_filename', True) and scene_tags_dot and scene_tags_dot not in new_stem:
             new_stem += scene_tags_dot
 
-        final_stem = sanitize_os_chars(new_stem)
+        # Apply filename sanitization, not just OS chars
+        final_stem = sanitize_filename(new_stem + format_data.get('ext', '')) # Sanitize with extension
+        final_stem, _ = os.path.splitext(final_stem) # Remove extension again
+
         if not final_stem:
             log.warning(f"Stem empty after OS sanitation for '{media_info.original_path.name}'. Using original.")
-            return sanitize_os_chars(media_info.original_path.stem)
+            # Sanitize the original stem as a last resort
+            return sanitize_filename(media_info.original_path.stem + format_data.get('ext', ''))
         return final_stem
 
     def _format_folder_path(self, media_info: MediaInfo, format_data: Dict) -> Optional[Path]:
@@ -269,7 +305,7 @@ class RenamerEngine:
 
         try:
             relative_str = folder_format.format(**defaultdict(str, format_data))
-            # Sanitize each part of the path
+            # Sanitize each part of the path using the OS-specific sanitizer
             sanitized_parts = [sanitize_os_chars(part) for part in Path(relative_str).parts if part and part != '.']
             if not sanitized_parts:
                 log.warning(f"Folder path resulted in empty components after sanitation. Format: '{folder_format}'")
@@ -280,9 +316,9 @@ class RenamerEngine:
             return None
 
     def _format_associated_name(self, assoc_path: Path, new_video_stem: str, format_data: Dict) -> str:
-        # ... (unchanged) ...
         original_extension = assoc_path.suffix
-        subtitle_extensions = set(self.cfg.get_list('subtitle_extensions', default_value=['.srt', '.sub']))
+        # Make subtitle check case-insensitive
+        subtitle_extensions = {ext.lower() for ext in self.cfg.get_list('subtitle_extensions', default_value=['.srt', '.sub'])}
         log.debug(f"Formatting associated file: '{assoc_path.name}' with video stem: '{new_video_stem}'")
         log.debug(f"Checking extension '{original_extension.lower()}' against subtitle types: {subtitle_extensions}")
 
@@ -302,6 +338,7 @@ class RenamerEngine:
                 'scene_tags': format_data.get('scene_tags', []), 'scene_tags_dot': format_data.get('scene_tags_dot', '')
             }
             try:
+                # Use defaultdict to avoid KeyErrors
                 new_name_unclean = sub_format.format(**defaultdict(str, sub_data)); log.debug(f"Formatted subtitle stem (unclean): '{new_name_unclean}'"); new_name_cleaned = re.sub(r'\.+', '.', new_name_unclean).strip('._ '); log.debug(f"Formatted subtitle stem (cleaned): '{new_name_cleaned}'")
                 new_name = f"{new_name_cleaned}{original_extension}"
                 if not new_name_cleaned or new_name == original_extension: fallback_name = f"{new_video_stem}{sub_data['lang_dot']}{sub_data['flags_dot']}{original_extension}".replace('..','.'); log.warning(f"Formatted subtitle name was empty or unchanged ('{new_name}'), using fallback: '{fallback_name}'"); new_name = fallback_name
@@ -309,13 +346,17 @@ class RenamerEngine:
         else:
             new_name = f"{new_video_stem}{original_extension}"; log.debug(f"Non-subtitle associated file, using simple name: '{new_name}'")
 
-        final_os_sanitized_name = sanitize_os_chars(new_name); log.debug(f"Final OS sanitized associated name: '{final_os_sanitized_name}'"); return final_os_sanitized_name
+        # Apply final sanitization
+        final_os_sanitized_name = sanitize_filename(new_name); log.debug(f"Final OS sanitized associated name: '{final_os_sanitized_name}'"); return final_os_sanitized_name
+
 
     def plan_rename(self, video_path: Path, associated_paths: List[Path], media_info: MediaInfo) -> RenamePlan:
-         # ... (plan generation logic largely unchanged, as it relies on the results of the formatting functions above) ...
         batch_id_suffix = uuid.uuid4().hex[:6]
         plan = RenamePlan(batch_id=f"plan-{video_path.stem[:10]}-{batch_id_suffix}", video_file=video_path)
-        try: base_target_dir = self.cfg.args.directory.resolve(); original_video_path_resolved = video_path.resolve()
+        try:
+            # Ensure base_target_dir comes from the actual args used for the run if available
+            base_target_dir = self.cfg.args.directory.resolve() if hasattr(self.cfg, 'args') and hasattr(self.cfg.args, 'directory') else video_path.parent.resolve()
+            original_video_path_resolved = video_path.resolve()
         except AttributeError: log.warning("Base directory not found in args, using video parent."); base_target_dir = video_path.parent.resolve(); original_video_path_resolved = video_path.resolve()
         except Exception as e: plan.status='failed'; plan.message=f"Cannot resolve base directory: {e}"; return plan
 
@@ -325,14 +366,16 @@ class RenamerEngine:
             # 1. Prepare Data & Type
             if not media_info.file_type or media_info.file_type == 'unknown': media_info.file_type = self._determine_file_type(media_info.guess_info)
             if media_info.file_type == 'unknown': plan.status = 'skipped'; plan.message = "Could not determine file type."; return plan
-            if not media_info.data: media_info.data = self._prepare_format_data(media_info)
-            log.debug(f"Data for formatting in plan_rename: {media_info.data}") # Debug data used
+            # --- Prepare data ONCE ---
+            format_data = self._prepare_format_data(media_info)
+            media_info.data = format_data # Store prepared data back in media_info if needed elsewhere
+            log.debug(f"Data for formatting in plan_rename: {format_data}") # Debug data used
 
-            # 2. Format Video Name & Folder (Now uses the updated methods)
-            new_video_stem = self._format_new_name(media_info, media_info.data);
-            relative_folder = self._format_folder_path(media_info, media_info.data)
+            # 2. Format Video Name & Folder (Uses updated methods)
+            new_video_stem = self._format_new_name(media_info, format_data);
+            relative_folder = self._format_folder_path(media_info, format_data)
             target_dir = base_target_dir / relative_folder if relative_folder else original_video_path_resolved.parent
-            plan.created_dir_path = target_dir if relative_folder and target_dir.resolve() != original_video_path_resolved.parent else None # Set created_dir only if truly different
+            plan.created_dir_path = target_dir.resolve() if relative_folder and target_dir.resolve() != original_video_path_resolved.parent.resolve() else None # Set created_dir only if truly different and exists/will exist
             new_video_filename = f"{new_video_stem}{video_path.suffix}"; final_video_path = target_dir / new_video_filename
             final_video_path_resolved = final_video_path.resolve(); log.debug(f"Calculated Final Video Path Resolved: {final_video_path_resolved}")
 
@@ -341,20 +384,21 @@ class RenamerEngine:
 
             # Compare lowercased strings for case-insensitivity
             vid_paths_differ = str(final_video_path_resolved).lower() != str(original_video_path_resolved).lower()
-            log.debug(f"Plan Check Video (case-insensitive): Differ={vid_paths_differ}")
+            log.debug(f"Plan Check Video (case-insensitive): Differ={vid_paths_differ} ('{original_video_path_resolved}' vs '{final_video_path_resolved}')")
             if vid_paths_differ:
                  log.debug(f"   Adding video action: {video_path.name} -> {final_video_path.name}")
-                 planned_actions_dict[original_video_path_resolved] = RenameAction(original_path=video_path, new_path=final_video_path, action_type='move' if target_dir.resolve() != original_video_path_resolved.parent else 'rename')
+                 planned_actions_dict[original_video_path_resolved] = RenameAction(original_path=video_path, new_path=final_video_path, action_type='move' if target_dir.resolve() != original_video_path_resolved.parent.resolve() else 'rename')
 
             for assoc_path in associated_paths:
                  original_assoc_path_resolved = assoc_path.resolve(); log.debug(f"   Processing Assoc: {assoc_path.name}"); log.debug(f"   Original Assoc Path Resolved: {original_assoc_path_resolved}")
-                 new_assoc_filename = self._format_associated_name(assoc_path, final_video_path.stem, media_info.data)
+                 # --- Pass prepared format_data ---
+                 new_assoc_filename = self._format_associated_name(assoc_path, final_video_path.stem, format_data)
                  final_assoc_path = target_dir / new_assoc_filename; final_assoc_path_resolved = final_assoc_path.resolve(); log.debug(f"   Calculated Final Assoc Path Resolved: {final_assoc_path_resolved}")
                  # Compare lowercased strings
-                 assoc_paths_differ = str(final_assoc_path_resolved).lower() != str(original_assoc_path_resolved).lower(); log.debug(f"   Plan Check Assoc '{assoc_path.name}' (case-insensitive): Differ={assoc_paths_differ}")
+                 assoc_paths_differ = str(final_assoc_path_resolved).lower() != str(original_assoc_path_resolved).lower(); log.debug(f"   Plan Check Assoc '{assoc_path.name}' (case-insensitive): Differ={assoc_paths_differ} ('{original_assoc_path_resolved}' vs '{final_assoc_path_resolved}')")
                  if assoc_paths_differ:
                       log.debug(f"      Adding assoc action: {assoc_path.name} -> {final_assoc_path.name}")
-                      planned_actions_dict[original_assoc_path_resolved] = RenameAction(original_path=assoc_path, new_path=final_assoc_path, action_type='move' if target_dir.resolve() != original_assoc_path_resolved.parent else 'rename')
+                      planned_actions_dict[original_assoc_path_resolved] = RenameAction(original_path=assoc_path, new_path=final_assoc_path, action_type='move' if target_dir.resolve() != original_assoc_path_resolved.parent.resolve() else 'rename')
 
             # 4. Check for No Change *after* attempting to plan all actions
             log.debug(f"Planned actions dict before 'no change' check ({len(planned_actions_dict)} actions): {planned_actions_dict}")
@@ -368,7 +412,16 @@ class RenamerEngine:
             original_paths_in_plan: Set[Path] = set(planned_actions_dict.keys())
             # Check for internal plan collisions (multiple sources to one target)
             if len(final_target_paths) < len(planned_actions_dict):
-                 plan.status = 'conflict_unresolved'; plan.message = "Multiple source files map to the same target path."; return plan
+                 # Find the colliding target
+                 target_counts = defaultdict(int)
+                 colliding_target = None
+                 for action in planned_actions_dict.values():
+                     target_res = action.new_path.resolve()
+                     target_counts[target_res] += 1
+                     if target_counts[target_res] > 1:
+                         colliding_target = target_res
+                         break
+                 plan.status = 'conflict_unresolved'; plan.message = f"Multiple source files map to the same target path ('{colliding_target.name}' if found)."; return plan
             # Check for external collisions (target exists and isn't part of this rename batch)
             for target_path_resolved in final_target_paths:
                  if target_path_resolved.exists() and target_path_resolved not in original_paths_in_plan:
@@ -384,3 +437,5 @@ class RenamerEngine:
 
         log.debug(f"--- Planning End: {video_path.name} -> Status={plan.status}, Actions={len(plan.actions)} ---")
         return plan
+
+# --- END OF FILE renamer_engine.py ---

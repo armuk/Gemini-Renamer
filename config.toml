@@ -10,6 +10,7 @@ on_conflict = "skip" # skip, overwrite, suffix, fail
 api_rate_limit_delay = 0.5 # seconds between API calls
 # Enable extraction (can also use --use-stream-info flag)
 extract_stream_info = true
+preserve_mtime = true
 # --- Formats ---
 series_format = "S{season:0>2}E{episode:0>2}{ext}"
 movie_format = "{movie_title} ({movie_year}){ext}"
@@ -24,6 +25,22 @@ associated_extensions = [".srt", ".sub", ".ssa", ".ass", ".vtt", ".nfo", ".jpg",
 # --- Unknown File Handing ---
 unknown_file_handling = "move_to_unknown"  # or "guessit_only" or "skip"
 unknown_files_dir = "_unknown_files_"
+
+# List of exact directory names to completely ignore during scanning.
+# Useful for system folders, temporary download folders, etc. Case-sensitive.
+# ignore_dirs = [".git", ".vscode", "@eaDir", "lost+found", "_temp_downloads"]
+ignore_dirs = []
+
+# List of glob patterns to ignore files OR directories during scanning.
+# Uses standard glob syntax (like shell patterns). Case-sensitivity depends on OS.
+# Examples:
+#   ".*"         - Ignore all dotfiles and dot-directories
+#   "*.tmp"      - Ignore files ending in .tmp
+#   "~*"         - Ignore files starting with ~ (often temporary files)
+#   "*.partial"  - Ignore partial download files
+#   "Thumbs.db"  - Ignore Windows thumbnail cache
+#   "* - sample" - Ignore sample files (adjust pattern as needed)
+ignore_patterns = [".*", "*.partial", "Thumbs.db", "*[sS]ample*"]
 
 # series_format = "{show_title} ({show_year})/Season {season:02d}/S{season:02d}E{episode:02d} - {episode_title}"
 # folder_format_series = "{show_title} ({show_year})" # Note: Season folder added by series_format
@@ -41,6 +58,9 @@ unknown_files_dir = "_unknown_files_"
 # folder_format_specials = "Specials" # Simple top-level Specials folder
 
 # ... other settings ...
+
+
+
 
 
 [profile.plex_optimized]
@@ -67,5 +87,19 @@ processing_mode = "series"
 series_format = "S{season:0>2}E{episode:0>2}{ext}"
 use_metadata = false
 create_folders = false
+
+[profile.downloads]
+# Profile for a downloads folder where you want to move unknowns
+unknown_file_handling = "move_to_unknown"
+unknown_files_dir = "_needs_sorting_" # Custom unknown dir for this profile
+recursive = true # Override recursive setting for this profile
+preserve_mtime = true
+
+[profile.archive]
+# Profile for an archive where you might want to try renaming based on filename only
+unknown_file_handling = "guessit_only"
+# It will use the default series_format unless overridden here
+# It will use the default preserve_mtime (false) unless overridden here
+
 
 # Add more profiles as needed

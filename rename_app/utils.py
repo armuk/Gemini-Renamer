@@ -1,63 +1,60 @@
 # --- START OF FILE utils.py ---
 
-# rename_app/utils.py
+import re
+import os
+import sys
+import json
+import sqlite3
+import tempfile
+import logging
+from pathlib import Path
+from functools import lru_cache
+from collections import defaultdict
+from typing import List, Tuple, Optional, Set, Dict, Any, Iterator # <-- Make sure Set is imported
+from itertools import groupby
 
-import re # Need regex for filename manipulations
-import os # Need os for path manipulations
-import json # Need json for temp file alternative (not used in SQLite path)
-import sqlite3 # Need for low_memory strategy
-import tempfile # Need for low_memory strategy
-import logging # Keep logging import for module-level logger
-from pathlib import Path # Need Path for file path manipulations
-from functools import lru_cache # Need lru_cache for caching results
-from collections import defaultdict # Need defaultdict for grouping
-from typing import List, Tuple, Optional, Set, Dict, Any, Iterator # Need various types for type hints
-from itertools import groupby # Need groupby for grouping items
-
-# --- TQDM (Progress Bars) Import ---
+# TQDM Import (unchanged)
 try: from tqdm import tqdm; TQDM_AVAILABLE = True
 except ImportError: TQDM_AVAILABLE = False;
 def tqdm(iterable, *args, **kwargs): yield from iterable
 
-# --- Other Imports ---
+# Other Imports (unchanged)
 try: import langcodes; LANGCODES_AVAILABLE = True
 except ImportError: LANGCODES_AVAILABLE = False
 try: import chardet; CHARDET_AVAILABLE = True
 except ImportError: CHARDET_AVAILABLE = False
 try: from guessit import guessit; GUESSIT_AVAILABLE = True
 except ImportError: GUESSIT_AVAILABLE = False
-
-# --- Import pymediainfo and set flag at module level ---
 try:
     from pymediainfo import MediaInfo as MediaInfoParser
     PYMEDIAINFO_AVAILABLE = True
 except ImportError:
-    PYMEDIAINFO_AVAILABLE = False # Flag remains defined even if import fails
+    PYMEDIAINFO_AVAILABLE = False
 
-log = logging.getLogger(__name__) # Define logger for the module
+log = logging.getLogger(__name__)
 
-# --- Filename Utils ---
-# (sanitize_os_chars, sanitize_filename, extract_scene_tags, detect_encoding, parse_subtitle_language, _get_base_stem - unchanged)
+# --- Filename Utils (sanitize_os_chars, sanitize_filename, extract_scene_tags, detect_encoding, parse_subtitle_language, _get_base_stem - unchanged) ---
+# ... (Keep these functions as they were - ensure sanitize_os_chars and sanitize_filename are robust) ...
 def sanitize_os_chars(name: str) -> str:
-    """Removes only OS-prohibited characters, leaves spaces/dots/etc."""
     sanitized = re.sub(r'[<>:"/\\|?*]', '_', name)
+    # Prevent names ending in '.' or ' ' which are problematic on Windows
+    sanitized = sanitized.rstrip('. ')
+    # Replace leading/trailing spaces/underscores after initial sanitization
+    sanitized = sanitized.strip('_ ')
+    # Ensure filename is not empty after stripping
     return sanitized if sanitized else "_invalid_char_removal_"
 
 def sanitize_filename(filename: str) -> str:
-    """Cleans a filename by removing/replacing invalid characters and handling edge cases."""
     if not filename or filename.isspace(): return "_invalid_name_"
-    starts_with_dot = filename.startswith('.')
-    sanitized = re.sub(r'[<>:"/\\|?*\s]+', '_', filename)
-    sanitized = re.sub(r'_+', '_', sanitized)
-    if not sanitized: return "_invalid_name_"
-    if all(c == '.' for c in sanitized): return "_invalid_dots_"
-    if all(c == '_' for c in sanitized): return "_invalid_underscores_"
-    while sanitized and sanitized[-1] in '._': sanitized = sanitized[:-1]
-    if len(sanitized) > 1 and not starts_with_dot and sanitized.startswith('_'): sanitized = sanitized.lstrip('_')
-    if not sanitized: return "_invalid_name_"
-    if starts_with_dot and not sanitized.startswith('.'): sanitized = "." + sanitized
-    if sanitized in ['.', '..']: return "_invalid_dots_"
-    return sanitized
+    # Separate stem and extension
+    stem, ext = os.path.splitext(filename)
+    # Sanitize stem first
+    sanitized_stem = sanitize_os_chars(stem)
+    # Basic check for totally invalid names after stem sanitization
+    if not sanitized_stem or sanitized_stem in ['.', '..'] or all(c in '._ ' for c in sanitized_stem):
+        sanitized_stem = "_invalid_name_"
+    # Recombine and return
+    return f"{sanitized_stem}{ext}"
 
 @lru_cache(maxsize=128)
 def extract_scene_tags(filename: str, tags_to_match: Tuple[str, ...]) -> Tuple[List[str], str]:
@@ -144,6 +141,7 @@ def parse_subtitle_language(filename: str, detect_enc: bool = False, file_path: 
     return lang_code_3b, sorted(list(flags)), encoding
 
 def _get_base_stem(file_path: Path, assoc_extensions: set) -> str:
+    # (Function unchanged)
     name = file_path.name; original_stem = file_path.stem; ext = file_path.suffix.lower()
     if ext not in assoc_extensions: return original_stem
     possible_base = original_stem; subtitle_ext = {'.srt', '.sub', '.ssa', '.ass', '.vtt'}
@@ -164,20 +162,13 @@ def _get_base_stem(file_path: Path, assoc_extensions: set) -> str:
         else: log.debug(f"Suffix stripping resulted in empty base for '{name}', using original stem '{original_stem}'")
         return original_stem
 
-# --- NEW: Function to Extract Stream Info ---
-@lru_cache(maxsize=256) # Cache results for the same file path
+# --- Function to Extract Stream Info (unchanged) ---
+# ... (Keep the function as it was) ...
+@lru_cache(maxsize=256)
 def extract_stream_info(file_path: Path) -> Dict[str, Optional[str]]:
     """
     Extracts resolution, video codec, audio codec, and channels using pymediainfo.
-
-    Args:
-        file_path: Path object for the media file.
-
-    Returns:
-        A dictionary containing extracted info (keys: 'resolution', 'vcodec',
-        'acodec', 'achannels'), or an empty dict if info cannot be extracted
-        or pymediainfo is unavailable. Values can be None if specific info
-        is missing in the file.
+    # ... (docstring unchanged) ...
     """
     results = {
         'resolution': None,
@@ -185,11 +176,11 @@ def extract_stream_info(file_path: Path) -> Dict[str, Optional[str]]:
         'acodec': None,
         'achannels': None
     }
-    # --- FIX: Check the module-level flag HERE ---
+    # --- MODIFIED: Rely solely on the global flag ---
     if not PYMEDIAINFO_AVAILABLE:
-        # Log only once or less frequently if needed
-        # log.debug("pymediainfo library not available, skipping stream info extraction.")
-        return results # Return defaults if library missing
+        log.debug("pymediainfo not available, skipping stream info extraction.")
+        return results
+    # --- END MODIFICATION ---
 
     if not file_path or not file_path.is_file():
         log.warning(f"Cannot extract stream info: File not found or not a file: {file_path}")
@@ -197,193 +188,240 @@ def extract_stream_info(file_path: Path) -> Dict[str, Optional[str]]:
 
     try:
         log.debug(f"Parsing stream info for: {file_path.name}")
-        # MediaInfoParser is now correctly imported if PYMEDIAINFO_AVAILABLE is True
+        # We already know PYMEDIAINFO_AVAILABLE is True if we reached here
+        from pymediainfo import MediaInfo as MediaInfoParser
         media_info = MediaInfoParser.parse(str(file_path))
 
         # --- Video Track ---
         video_track = next((t for t in media_info.tracks if t.track_type == 'Video'), None)
         if video_track:
-            # Resolution (prefer height)
             height = getattr(video_track, 'height', None)
-            if height:
-                if height >= 3800: results['resolution'] = '2160p' # UHD/4K
-                elif height >= 1000: results['resolution'] = '1080p'
-                elif height >= 680: results['resolution'] = '720p'
-                elif height >= 500: results['resolution'] = '576p' # PAL DVDish
-                elif height >= 440: results['resolution'] = '480p' # NTSC DVDish
-                else: results['resolution'] = 'SD'
-            else: # Fallback to width if height is missing
-                width = getattr(video_track, 'width', None)
-                if width:
-                     if width >= 3800: results['resolution'] = '2160p'
-                     elif width >= 1900: results['resolution'] = '1080p'
-                     elif width >= 1200: results['resolution'] = '720p'
+            width = getattr(video_track, 'width', None)
+            resolution = None
 
-            # Video Codec (use 'format' and simplify)
+            if height:
+                if height >= 2000: resolution = '2160p'
+                elif height >= 1000: resolution = '1080p'
+                elif height >= 680: resolution = '720p'
+                elif height >= 500: resolution = '576p'
+                elif height >= 440: resolution = '480p'
+                elif height >= 350: resolution = '360p'
+                else: resolution = 'SD'
+            elif width:
+                log.debug(f"Height missing for {file_path.name}, using width {width} for resolution estimate.")
+                if width >= 3800: resolution = '2160p'
+                elif width >= 1900: resolution = '1080p'
+                elif width >= 1200: resolution = '720p'
+                elif width >= 700: resolution = '480p'
+                elif width >= 460: resolution = '360p'
+                else: resolution = 'SD'
+
+            results['resolution'] = resolution
+
             vformat = getattr(video_track, 'format', None)
             if vformat:
+                # ... (vcodec logic unchanged) ...
                 vformat = vformat.lower()
                 if 'avc' in vformat or 'h264' in vformat: results['vcodec'] = 'h264'
                 elif 'hevc' in vformat or 'h265' in vformat: results['vcodec'] = 'h265'
                 elif 'vp9' in vformat: results['vcodec'] = 'vp9'
                 elif 'av1' in vformat: results['vcodec'] = 'av1'
                 elif 'mpeg-4 visual' in vformat or 'xvid' in vformat: results['vcodec'] = 'xvid'
-                elif 'mpeg video' in vformat: # MPEG-1/2
+                elif 'mpeg video' in vformat:
                     version = getattr(video_track, 'format_version', '')
                     if 'version 2' in version.lower(): results['vcodec'] = 'mpeg2'
                     else: results['vcodec'] = 'mpeg1'
-                else: results['vcodec'] = vformat.split('/')[0].strip() # Best guess
+                else: results['vcodec'] = vformat.split('/')[0].strip()
 
-        # --- Audio Track (use first found for simplicity) ---
+
+        # --- Audio Track ---
         audio_track = next((t for t in media_info.tracks if t.track_type == 'Audio'), None)
         if audio_track:
-            # Audio Codec (use 'format')
             aformat = getattr(audio_track, 'format', None)
             if aformat:
-                aformat = aformat.lower()
-                # Common mappings
-                if 'aac' in aformat: results['acodec'] = 'aac'
-                elif 'ac-3' in aformat: results['acodec'] = 'ac3'
-                elif 'e-ac-3' in aformat: results['acodec'] = 'eac3' # Dolby Digital Plus
-                elif 'dts' in aformat: results['acodec'] = 'dts' # Could be dts-hd ma etc., simplify for now
-                elif 'truehd' in aformat: results['acodec'] = 'truehd'
-                elif 'opus' in aformat: results['acodec'] = 'opus'
-                elif 'vorbis' in aformat: results['acodec'] = 'vorbis'
-                elif 'flac' in aformat: results['acodec'] = 'flac'
-                elif 'mp3' in aformat or 'mpeg audio' in aformat: results['acodec'] = 'mp3'
-                elif 'pcm' in aformat: results['acodec'] = 'pcm'
-                else: results['acodec'] = aformat.split('/')[0].strip() # Best guess
+                # ... (acodec logic unchanged) ...
+                 aformat = aformat.lower()
+                 if 'aac' in aformat: results['acodec'] = 'aac'
+                 elif 'ac-3' in aformat: results['acodec'] = 'ac3'
+                 elif 'e-ac-3' in aformat: results['acodec'] = 'eac3'
+                 elif 'dts' in aformat: results['acodec'] = 'dts'
+                 elif 'truehd' in aformat: results['acodec'] = 'truehd'
+                 elif 'opus' in aformat: results['acodec'] = 'opus'
+                 elif 'vorbis' in aformat: results['acodec'] = 'vorbis'
+                 elif 'flac' in aformat: results['acodec'] = 'flac'
+                 elif 'mp3' in aformat or 'mpeg audio' in aformat: results['acodec'] = 'mp3'
+                 elif 'pcm' in aformat: results['acodec'] = 'pcm'
+                 else: results['acodec'] = aformat.split('/')[0].strip()
 
-            # Audio Channels (use 'channel_s')
             channels = getattr(audio_track, 'channel_s', None)
             if channels:
+                # ... (achannels logic unchanged) ...
                 try:
                     num_channels = int(channels)
-                    if num_channels >= 8: results['achannels'] = '7.1' # Or more
-                    elif num_channels >= 6: results['achannels'] = '5.1' # Common 6ch layout
+                    if num_channels >= 8: results['achannels'] = '7.1'
+                    elif num_channels >= 6: results['achannels'] = '5.1'
                     elif num_channels == 2: results['achannels'] = '2.0'
                     elif num_channels == 1: results['achannels'] = '1.0'
-                    else: results['achannels'] = f"{num_channels}.0" # Handle other cases like 4.0
+                    else: results['achannels'] = f"{num_channels}.0"
                 except (ValueError, TypeError):
                      log.warning(f"Could not parse audio channels '{channels}' for {file_path.name}")
 
-    except ImportError: # Should be caught by initial flag, but defensive check
-        log.error("pymediainfo import failed during stream info extraction attempt (should not happen).")
-        return results
+    # --- MODIFIED: Removed the inner ImportError handler ---
+    # except ImportError:
+    #     log.error("pymediainfo import failed during stream info extraction attempt.")
+    #     # No need to set PYMEDIAINFO_AVAILABLE = False here, global check handles it
+    #     return results
     except Exception as e:
         log.error(f"Error parsing media info for '{file_path.name}': {e}", exc_info=True)
-        # Return default dict on error
 
     log.debug(f"Extracted stream info for {file_path.name}: {results}")
     return results
 
-# --- Scan Function ---
+# --- Scan Functions (MODIFIED) ---
+# --- Helper function to check if a path should be ignored ---
+def _is_ignored(item_path: Path, ignore_dirs: Set[str], ignore_patterns: List[str]) -> bool:
+    """Checks if a given path should be ignored based on config."""
+    item_name = item_path.name
+    # Check against exact directory names first
+    if item_name in ignore_dirs:
+        log.debug(f"  -> Ignoring '{item_path}' (matches ignore_dirs: '{item_name}')")
+        return True
 
-# --- ENHANCEMENT: Added Low Memory Scan Strategy ---
+    # Check against glob patterns (applies to files and dirs)
+    for pattern in ignore_patterns:
+        try:
+            # Use Path.match for glob pattern matching
+            if item_path.match(pattern):
+                log.debug(f"  -> Ignoring '{item_path}' (matches ignore pattern: '{pattern}')")
+                return True
+        except ValueError as e_match:
+            log.error(f"  -> Error matching pattern '{pattern}' against '{item_path}': {e_match}")
+            # Treat pattern error as a reason to ignore the file for safety
+            return True
+    return False
+
+
 def scan_media_files(target_dir: Path, cfg_helper) -> Iterator[Tuple[str, Dict[str, Any]]]:
-    """
-    Scans the target directory for media files and groups them by base stem.
-    Yields batches one by one.
-
-    Args:
-        target_dir: The directory Path object to scan.
-        cfg_helper: The ConfigHelper instance for accessing settings.
-
-    Yields:
-        Tuples of (base_stem, batch_dict), where batch_dict contains
-        'video' (Path or None) and 'associated' (List[Path]).
-
-    Strategies:
-        - 'memory': Faster for moderate directories, loads stems and paths into memory.
-        - 'low_memory': Slower (due to DB IO), uses a temporary SQLite DB
-                       to handle extremely large directories with lower RAM usage.
-    """
     scan_strategy = cfg_helper('scan_strategy', 'memory')
     log.info(f"Scanning directory: {target_dir} (Strategy: {scan_strategy})")
-
-    # --- Common Config ---
     allowed_video_ext = set(cfg_helper.get_list('video_extensions', default_value=[]))
     allowed_assoc_ext = set(cfg_helper.get_list('associated_extensions', default_value=[]))
     all_allowed_ext = allowed_video_ext.union(allowed_assoc_ext)
     is_recursive = cfg_helper('recursive', False)
 
+    # --- Get ignore lists ---
+    ignore_dirs_list = cfg_helper.get_list('ignore_dirs', default_value=[])
+    ignore_dirs = set(d for d in ignore_dirs_list if d) # Ensure no empty strings
+    ignore_patterns = cfg_helper.get_list('ignore_patterns', default_value=[])
+    # Add common hidden file/dir pattern if not already present implicitly
+    if '.*' not in ignore_patterns and not any(p.startswith('.') for p in ignore_dirs):
+        log.debug("Adding default '.*' to ignore_patterns.")
+        ignore_patterns.append('.*')
+
+    log.debug(f"Ignore Dirs Set: {ignore_dirs}")
+    log.debug(f"Ignore Patterns List: {ignore_patterns}")
+    # --- END ---
+
     if not allowed_video_ext and not allowed_assoc_ext:
         log.warning("No video or associated extensions configured. Scan will find nothing.")
-        return # Yield nothing
+        return
 
-    # --- Strategy Branching ---
     if scan_strategy == 'low_memory':
-        yield from _scan_media_files_low_memory(
-            target_dir, is_recursive, all_allowed_ext, allowed_video_ext
-        )
-    else: # Default to 'memory' strategy
-        yield from _scan_media_files_memory(
-            target_dir, is_recursive, all_allowed_ext, allowed_video_ext, allowed_assoc_ext
-        )
-# --- End Strategy Branching ---
+        yield from _scan_media_files_low_memory(target_dir, is_recursive, all_allowed_ext, allowed_video_ext, ignore_dirs, ignore_patterns)
+    else:
+        yield from _scan_media_files_memory(target_dir, is_recursive, all_allowed_ext, allowed_video_ext, allowed_assoc_ext, ignore_dirs, ignore_patterns)
 
-def _scan_media_files_memory(target_dir: Path, is_recursive: bool, all_allowed_ext: set, allowed_video_ext: set, allowed_assoc_ext: set) -> Iterator[Tuple[str, Dict[str, Any]]]:
-    """Original memory-based scanning strategy."""
+def _scan_media_files_memory(target_dir: Path, is_recursive: bool, all_allowed_ext: set, allowed_video_ext: set, allowed_assoc_ext: set, ignore_dirs: Set[str], ignore_patterns: List[str]) -> Iterator[Tuple[str, Dict[str, Any]]]:
     log.debug("Using 'memory' scanning strategy.")
     all_files_by_base_stem = defaultdict(list)
-    processed_stems = set() # Tracks stems already yielded
+    file_count = 0
+    items_processed = 0
 
     try:
         base_path = target_dir.resolve()
         if not base_path.is_dir():
             log.error(f"Target path is not a valid directory: {base_path}")
             return
-        items_generator = base_path.rglob('*') if is_recursive else base_path.glob('*')
-        iterator = tqdm(items_generator, desc="Scanning (memory)", unit="item", disable=not TQDM_AVAILABLE)
+
+        # --- Corrected os.walk logic ---
+        if is_recursive:
+            # Use os.walk for efficient directory skipping
+            walker = os.walk(base_path, topdown=True, onerror=lambda e: log.warning(f"os.walk error: {e}"))
+            # Wrap walker with tqdm if available
+            iterator = tqdm(walker, desc="Scanning Dirs (memory)", unit="dir", disable=not TQDM_AVAILABLE or not sys.stdout.isatty()) if TQDM_AVAILABLE else walker
+
+            for root, dirs, files in iterator:
+                current_dir_path = Path(root)
+                items_processed += 1 + len(dirs) + len(files) # Approximate count
+
+                # --- Filter ignored directories IN-PLACE ---
+                original_dirs = dirs[:] # Copy before modifying
+                dirs[:] = [d for d in original_dirs if not _is_ignored(current_dir_path / d, ignore_dirs, ignore_patterns)]
+                if len(dirs) < len(original_dirs):
+                    log.debug(f"Filtered dirs in {current_dir_path}: {set(original_dirs) - set(dirs)}")
+
+                # Process files in the current allowed directory
+                for filename in files:
+                    item_path = current_dir_path / filename
+                    if _is_ignored(item_path, ignore_dirs, ignore_patterns):
+                        continue
+
+                    item_ext = item_path.suffix.lower()
+                    if item_ext in all_allowed_ext and item_path.is_file(): # is_file check is good practice
+                        file_count += 1
+                        base_stem = _get_base_stem(item_path, all_allowed_ext)
+                        log.debug(f"Scan (memory) found: '{item_path.name}' -> Base Stem: '{base_stem}'")
+                        all_files_by_base_stem[base_stem].append(item_path)
+                    else:
+                         log.debug(f"  -> Skipping {item_path.name} due to ext '{item_ext}' (allowed: {all_allowed_ext}) or not a file.")
+
+        else: # Non-recursive uses glob
+            items_generator = base_path.glob('*')
+            iterator = tqdm(items_generator, desc="Scanning (memory)", unit="item", disable=not TQDM_AVAILABLE or not sys.stdout.isatty()) if TQDM_AVAILABLE else items_generator
+            for item_path in iterator:
+                items_processed += 1
+                if _is_ignored(item_path, ignore_dirs, ignore_patterns):
+                    continue
+
+                item_ext = item_path.suffix.lower()
+                if item_ext in all_allowed_ext:
+                    try:
+                        if item_path.is_file():
+                            file_count += 1
+                            base_stem = _get_base_stem(item_path, all_allowed_ext)
+                            log.debug(f"Scan (memory, non-recursive) found: '{item_path.name}' -> Base Stem: '{base_stem}'")
+                            all_files_by_base_stem[base_stem].append(item_path)
+                        else:
+                            log.debug(f"  -> Skipping non-file item: {item_path.name}")
+                    except OSError as e:
+                        log.warning(f"Cannot access item {item_path}: {e}")
+                else:
+                    log.debug(f"  -> Skipping {item_path.name} due to ext '{item_ext}' (allowed: {all_allowed_ext}).")
+
     except Exception as e:
-        log.error(f"Error listing files in '{target_dir}' (memory scan): {e}")
+        log.error(f"Error during file scanning in '{target_dir}' (memory scan): {e}", exc_info=True)
         return
 
-    # --- First Pass: Group by stem in memory ---
-    file_count = 0
-    for item_path in iterator:
-        log.debug(f"Scanner considering item: {item_path} (Exists: {item_path.exists()}, Is File: {item_path.is_file() if item_path.exists() else 'N/A'})") # ADD THIS
-        item_ext = item_path.suffix.lower()
-        if not item_ext or item_ext not in all_allowed_ext or item_path.name.startswith('.'):
-            log.debug(f"  -> Skipping {item_path.name} due to ext '{item_ext}' (allowed: {all_allowed_ext}) or dotfile.") # ADD THIS
-            continue
-        try:
-            if not item_path.is_file(): continue
-        except OSError as e: log.warning(f"Cannot access item {item_path}: {e}"); continue
-
-        file_count += 1
-        base_stem = _get_base_stem(item_path, all_allowed_ext)
-        log.debug(f"Scan (memory) found: '{item_path.name}' -> Base Stem: '{base_stem}'")
-        all_files_by_base_stem[base_stem].append(item_path)
-
-    log.info(f"Scan (memory) phase 1 complete. Found {file_count} relevant files, {len(all_files_by_base_stem)} unique base stems.")
-
-    # --- Second Pass: Process groups and yield ---
+    log.info(f"Scan (memory) phase 1 complete. Processed ~{items_processed} items, found {file_count} relevant files, {len(all_files_by_base_stem)} unique base stems.")
     log.debug("Processing grouped stems (memory)...")
     yield_count = 0
-    # Sort stems for deterministic output (optional)
     sorted_stems = sorted(all_files_by_base_stem.keys())
-
-    memory_iterator = tqdm(sorted_stems, desc="Grouping (memory)", unit="stem", disable=not TQDM_AVAILABLE) if TQDM_AVAILABLE else sorted_stems
+    # --- Use disable flag correctly ---
+    memory_iterator = tqdm(sorted_stems, desc="Grouping (memory)", unit="stem", disable=not TQDM_AVAILABLE or not sys.stdout.isatty()) if TQDM_AVAILABLE else sorted_stems
+    # --- End ---
 
     for base_stem in memory_iterator:
         file_list = all_files_by_base_stem[base_stem]
-        video_file = None
-        associated_files = []
-        ambiguous = False
+        video_file = None; associated_files = []; ambiguous = False
         for file_path in file_list:
             ext = file_path.suffix.lower()
             if ext in allowed_video_ext:
                 if video_file is not None:
                      log.warning(f"Ambiguous: Multiple videos match base stem '{base_stem}'. Found '{file_path.name}' and '{video_file.name}'. Skipping this stem.")
-                     ambiguous = True
-                     break # Stop processing this stem
+                     ambiguous = True; break
                 video_file = file_path
-            elif ext in allowed_assoc_ext:
-                associated_files.append(file_path)
-
+            elif ext in allowed_assoc_ext: associated_files.append(file_path)
         if not ambiguous and video_file:
-            # Filter associated_files to remove the video file itself (safety check)
             final_associated = [f for f in associated_files if f.resolve() != video_file.resolve()]
             log.debug(f"Yielding batch (memory) for base stem '{base_stem}'")
             yield_count +=1
@@ -391,128 +429,122 @@ def _scan_media_files_memory(target_dir: Path, is_recursive: bool, all_allowed_e
 
     log.info(f"Scan (memory) finished. Yielded {yield_count} valid batches.")
 
-def _scan_media_files_low_memory(target_dir: Path, is_recursive: bool, all_allowed_ext: set, allowed_video_ext: set) -> Iterator[Tuple[str, Dict[str, Any]]]:
-    """Low memory scanning strategy using a temporary SQLite database."""
-    log.debug("Using 'low_memory' scanning strategy.")
-    db_conn = None
-    db_cursor = None
-    # Use NamedTemporaryFile for automatic cleanup
-    with tempfile.NamedTemporaryFile(prefix="renamer_scan_", suffix=".db", delete=True) as temp_db_file:
-        db_path = temp_db_file.name
-        log.info(f"Using temporary database for scan: {db_path}")
 
+def _scan_media_files_low_memory(target_dir: Path, is_recursive: bool, all_allowed_ext: set, allowed_video_ext: set, ignore_dirs: Set[str], ignore_patterns: List[str]) -> Iterator[Tuple[str, Dict[str, Any]]]:
+    log.debug("Using 'low_memory' scanning strategy.")
+    db_conn = None; db_cursor = None
+    with tempfile.NamedTemporaryFile(prefix="renamer_scan_", suffix=".db", delete=True) as temp_db_file:
+        db_path = temp_db_file.name; log.info(f"Using temporary database for scan: {db_path}")
         try:
-            # --- Phase 1: Scan and Insert into Temp DB ---
-            db_conn = sqlite3.connect(db_path, isolation_level=None) # Autocommit mode might be simpler
-            db_cursor = db_conn.cursor()
-            db_cursor.execute("PRAGMA journal_mode=OFF;") # Optimize for speed
-            db_cursor.execute("PRAGMA synchronous=OFF;") # Optimize for speed
-            db_cursor.execute("""
-                CREATE TABLE files (
-                    base_stem TEXT NOT NULL,
-                    file_path TEXT NOT NULL,
-                    is_video INTEGER NOT NULL -- 1 for video, 0 for associated
-                );
-            """)
-            # Index after table creation
+            db_conn = sqlite3.connect(db_path, isolation_level=None); db_cursor = db_conn.cursor()
+            db_cursor.execute("PRAGMA journal_mode=OFF;"); db_cursor.execute("PRAGMA synchronous=OFF;")
+            db_cursor.execute("CREATE TABLE files (base_stem TEXT NOT NULL, file_path TEXT NOT NULL, is_video INTEGER NOT NULL);")
             db_cursor.execute("CREATE INDEX idx_stem ON files (base_stem);")
 
             log.debug("Starting directory traversal and DB insertion...")
-            items_processed = 0
-            items_inserted = 0
+            items_processed = 0; items_inserted = 0
             try:
-                base_path = target_dir.resolve()
-                if not base_path.is_dir():
-                     log.error(f"Target path is not a valid directory: {base_path}")
-                     return # Stop generation
-                items_generator = base_path.rglob('*') if is_recursive else base_path.glob('*')
-                # Progress bar for scanning phase
-                scan_iterator = tqdm(items_generator, desc="Scanning (low_mem)", unit="item", disable=not TQDM_AVAILABLE)
-            except Exception as e:
-                log.error(f"Error listing files in '{target_dir}' (low_mem scan): {e}")
-                return # Stop generation
+                base_path = target_dir.resolve();
+                if not base_path.is_dir(): log.error(f"Target path is not a valid directory: {base_path}"); return
 
-            for item_path in scan_iterator:
-                items_processed += 1
-                item_ext = item_path.suffix.lower()
-                if not item_ext or item_ext not in all_allowed_ext or item_path.name.startswith('.'):
-                    continue
-                try:
-                    if not item_path.is_file(): continue
-                except OSError as e: log.warning(f"Cannot access item {item_path}: {e}"); continue
+                # --- Corrected os.walk logic ---
+                if is_recursive:
+                    walker = os.walk(base_path, topdown=True, onerror=lambda e: log.warning(f"os.walk error: {e}"))
+                    iterator = tqdm(walker, desc="Scanning Dirs(low_mem)", unit="dir", disable=not TQDM_AVAILABLE or not sys.stdout.isatty()) if TQDM_AVAILABLE else walker
 
-                base_stem = _get_base_stem(item_path, all_allowed_ext)
-                is_video = 1 if item_ext in allowed_video_ext else 0
-                try:
-                    db_cursor.execute(
-                        "INSERT INTO files (base_stem, file_path, is_video) VALUES (?, ?, ?)",
-                        (base_stem, str(item_path.resolve()), is_video)
-                    )
-                    items_inserted += 1
-                except sqlite3.Error as e_ins:
-                    log.error(f"Failed to insert file '{item_path}' into temp DB: {e_ins}")
+                    for root, dirs, files in iterator:
+                        current_dir_path = Path(root)
+                        items_processed += 1 + len(dirs) + len(files) # Approximate count
+
+                        # --- Filter ignored directories IN-PLACE ---
+                        original_dirs = dirs[:] # Copy before modifying
+                        dirs[:] = [d for d in original_dirs if not _is_ignored(current_dir_path / d, ignore_dirs, ignore_patterns)]
+                        if len(dirs) < len(original_dirs):
+                             log.debug(f"Filtered dirs in {current_dir_path}: {set(original_dirs) - set(dirs)}")
+
+                        # Process files in the current allowed directory
+                        for filename in files:
+                            item_path = current_dir_path / filename
+                            if _is_ignored(item_path, ignore_dirs, ignore_patterns):
+                                continue
+
+                            item_ext = item_path.suffix.lower()
+                            if item_ext in all_allowed_ext:
+                                try:
+                                    if item_path.is_file():
+                                        base_stem = _get_base_stem(item_path, all_allowed_ext)
+                                        is_video = 1 if item_ext in allowed_video_ext else 0
+                                        db_cursor.execute("INSERT INTO files (base_stem, file_path, is_video) VALUES (?, ?, ?)",(base_stem, str(item_path.resolve()), is_video)); items_inserted += 1
+                                    else:
+                                         log.debug(f"  -> Skipping non-file item: {item_path.name}")
+                                except sqlite3.Error as e_ins: log.error(f"Failed to insert file '{item_path}' into temp DB: {e_ins}")
+                                except OSError as e_stat: log.warning(f"Cannot access item {item_path}: {e_stat}")
+                            else:
+                                log.debug(f"  -> Skipping {item_path.name} due to ext '{item_ext}' (allowed: {all_allowed_ext}).")
+
+                else: # Non-recursive uses glob
+                    items_generator = base_path.glob('*')
+                    iterator = tqdm(items_generator, desc="Scanning (low_mem)", unit="item", disable=not TQDM_AVAILABLE or not sys.stdout.isatty()) if TQDM_AVAILABLE else items_generator
+                    for item_path in iterator:
+                        items_processed += 1
+                        if _is_ignored(item_path, ignore_dirs, ignore_patterns):
+                            continue
+
+                        item_ext = item_path.suffix.lower()
+                        if item_ext in all_allowed_ext:
+                             try:
+                                if item_path.is_file():
+                                    base_stem = _get_base_stem(item_path, all_allowed_ext)
+                                    is_video = 1 if item_ext in allowed_video_ext else 0
+                                    db_cursor.execute("INSERT INTO files (base_stem, file_path, is_video) VALUES (?, ?, ?)",(base_stem, str(item_path.resolve()), is_video)); items_inserted += 1
+                                else:
+                                    log.debug(f"  -> Skipping non-file item: {item_path.name}")
+                             except sqlite3.Error as e_ins: log.error(f"Failed to insert file '{item_path}' into temp DB: {e_ins}")
+                             except OSError as e_stat: log.warning(f"Cannot access item {item_path}: {e_stat}")
+                        else:
+                            log.debug(f"  -> Skipping {item_path.name} due to ext '{item_ext}' (allowed: {all_allowed_ext}).")
+
+            except Exception as e: log.error(f"Error during directory traversal in '{target_dir}' (low_mem scan): {e}", exc_info=True); return
 
             log.info(f"Scan (low_mem) phase 1 complete. Processed ~{items_processed} items, inserted {items_inserted} relevant files into temp DB.")
 
-            # --- Phase 2: Query DB, Group implicitly, and Yield Batches ---
             log.debug("Querying distinct stems from temp DB...")
             try:
-                db_cursor.execute("SELECT DISTINCT base_stem FROM files ORDER BY base_stem;")
-                distinct_stems = [row[0] for row in db_cursor.fetchall()]
-            except sqlite3.Error as e_dist:
-                 log.error(f"Failed to query distinct stems from temp DB: {e_dist}")
-                 return # Stop generation
-
+                db_cursor.execute("SELECT DISTINCT base_stem FROM files ORDER BY base_stem;"); distinct_stems = [row[0] for row in db_cursor.fetchall()]
+            except sqlite3.Error as e_dist: log.error(f"Failed to query distinct stems from temp DB: {e_dist}"); return
             log.info(f"Found {len(distinct_stems)} unique base stems in temp DB. Processing batches...")
 
             yield_count = 0
-            group_iterator = tqdm(distinct_stems, desc="Grouping (low_mem)", unit="stem", disable=not TQDM_AVAILABLE) if TQDM_AVAILABLE else distinct_stems
+            # --- Use disable flag correctly ---
+            group_iterator = tqdm(distinct_stems, desc="Grouping (low_mem)", unit="stem", disable=not TQDM_AVAILABLE or not sys.stdout.isatty()) if TQDM_AVAILABLE else distinct_stems
+            # --- End ---
 
             for base_stem in group_iterator:
                 try:
-                    # Fetch all files for the current stem, videos first
-                    db_cursor.execute(
-                        "SELECT file_path, is_video FROM files WHERE base_stem = ? ORDER BY is_video DESC;",
-                        (base_stem,)
-                    )
-                    stem_files = db_cursor.fetchall() # Fetch all for this stem
-                except sqlite3.Error as e_fetch:
-                    log.error(f"Failed to fetch files for stem '{base_stem}': {e_fetch}")
-                    continue # Skip to next stem
-
-                video_file : Optional[Path] = None
-                associated_files : List[Path] = []
-                ambiguous = False
+                    db_cursor.execute("SELECT file_path, is_video FROM files WHERE base_stem = ? ORDER BY is_video DESC;",(base_stem,)); stem_files = db_cursor.fetchall()
+                except sqlite3.Error as e_fetch: log.error(f"Failed to fetch files for stem '{base_stem}': {e_fetch}"); continue
+                video_file : Optional[Path] = None; associated_files : List[Path] = []; ambiguous = False
                 for file_path_str, is_video_flag in stem_files:
-                    file_path = Path(file_path_str) # Convert back to Path
+                    file_path = Path(file_path_str)
                     if is_video_flag == 1:
-                        if video_file is not None:
-                            log.warning(f"Ambiguous (low_mem): Multiple videos match base stem '{base_stem}'. Found '{file_path.name}' and '{video_file.name}'. Skipping this stem.")
-                            ambiguous = True
-                            break # Stop processing this stem
+                        if video_file is not None: log.warning(f"Ambiguous (low_mem): Multiple videos match base stem '{base_stem}'. Found '{file_path.name}' and '{video_file.name}'. Skipping this stem."); ambiguous = True; break
                         video_file = file_path
-                    else: # is associated
-                        associated_files.append(file_path)
-
+                    else: associated_files.append(file_path)
                 if not ambiguous and video_file:
-                    # Associated files list already excludes the video here because of the query logic
                     log.debug(f"Yielding batch (low_mem) for base stem '{base_stem}'")
                     yield_count += 1
-                    yield (base_stem, {"video": video_file, "associated": associated_files})
-
+                    # Ensure associated files are distinct from video file (safety check)
+                    final_associated = [f for f in associated_files if f.resolve() != video_file.resolve()]
+                    yield (base_stem, {"video": video_file, "associated": final_associated})
             log.info(f"Scan (low_mem) finished. Yielded {yield_count} valid batches.")
-
-        except Exception as e:
-            log.exception(f"Error during low_memory scan: {e}")
-            # Ensure cleanup happens in finally
+        except Exception as e: log.exception(f"Error during low_memory scan: {e}")
         finally:
             log.debug("Closing temporary scan database connection...")
             if db_cursor:
                 try: db_cursor.close()
-                except sqlite3.Error: pass # Ignore close errors
+                except sqlite3.Error: pass
             if db_conn:
                 try: db_conn.close()
-                except sqlite3.Error: pass # Ignore close errors
-            # Temp file is deleted automatically by context manager when closed/scope exit
+                except sqlite3.Error: pass
 
 # --- END OF FILE utils.py ---
