@@ -8,6 +8,9 @@ from pathlib import Path
 from typing import Optional, Tuple, TYPE_CHECKING, Any, Iterable, Sequence, Dict, cast, List, Deque, Union
 from collections import deque
 
+# --- Tenacity Import ---
+from tenacity import AsyncRetrying, RetryError, stop_after_attempt, wait_fixed, retry_if_exception
+
 # --- API Client Imports ---
 from .api_clients import get_tmdb_client, get_tvdb_client
 
@@ -37,12 +40,13 @@ try:
 except ImportError:
     THEFUZZ_AVAILABLE = False
 
-try:
-    from tenacity import RetryError, AsyncRetrying, stop_after_attempt, wait_fixed, retry_if_exception # Consider using tenacity if desired
-    TENACITY_AVAILABLE = True
-except ImportError:
-    TENACITY_AVAILABLE = False
-    RetryError = Exception # Define fallback
+# TENACITY_AVAILABLE flag is no longer strictly needed as we're making it a core part now
+# try:
+# from tenacity import RetryError, AsyncRetrying, stop_after_attempt, wait_fixed, retry_if_exception
+# TENACITY_AVAILABLE = True # Now a direct import
+# except ImportError:
+# TENACITY_AVAILABLE = False
+# RetryError = Exception # Not needed, RetryError comes from tenacity
 
 try:
     import dateutil.parser
@@ -419,6 +423,13 @@ class MetadataFetcher:
             log.warning(f"Error setting cache key '{key}': {e}", exc_info=True)
 
     # --- Synchronous Fetch Methods ---
+    # These methods remain the same. They should:
+    # 1. Make the actual API calls.
+    # 2. If a definitive "Not Found" (e.g., API 404) occurs that `should_retry_api_error` would deem non-retryable,
+    #    they should log it and return (None, None, None) or (None, None, None, None).
+    # 3. For other API errors (timeouts, server errors, potentially retryable TMDbExceptions), they should let the original exception propagate.
+    # 4. For non-retryable API errors (invalid key), they should also let the original exception propagate.
+    # Your existing _sync methods already mostly follow this pattern.
 
     def _sync_tmdb_movie_fetch(self, sync_title, sync_year_guess, sync_lang):
         """Synchronous part of TMDB movie fetching."""
@@ -796,205 +807,159 @@ class MetadataFetcher:
     # --- Async Fetch Methods ---
 
     async def _do_fetch_tmdb_movie(self, title_arg, year_arg, lang='en'):
-        """Async wrapper for TMDB movie fetch with retries."""
-        attempts_cfg = self.cfg('api_retry_attempts', 3); wait_sec_cfg = self.cfg('api_retry_wait_seconds', 2)
-        max_attempts = max(1, attempts_cfg if attempts_cfg is not None else 3); wait_seconds = max(0, wait_sec_cfg if wait_sec_cfg is not None else 2)
-        last_exception = None
+        """Async wrapper for TMDB movie fetch with tenacity retries."""
+        max_attempts_cfg = self.cfg('api_retry_attempts', 3)
+        wait_sec_cfg = self.cfg('api_retry_wait_seconds', 2)
 
-        for attempt in range(max_attempts):
-            try:
-                log.debug(f"Attempt {attempt + 1}/{max_attempts} for TMDB movie: '{title_arg}' ({year_arg})")
-                # Call the CORRECT instance method via _run_sync
-                data_obj, ids_dict, score = await self._run_sync(self._sync_tmdb_movie_fetch, title_arg, year_arg, lang)
+        max_attempts = max(1, int(max_attempts_cfg)) if max_attempts_cfg is not None else 3
+        wait_seconds = float(wait_sec_cfg) if wait_sec_cfg is not None else 2.0
 
-                if data_obj is None:
-                    log.info(f"TMDB movie '{title_arg}' ({year_arg}) not found or no match after filtering.")
-                    return None, None, None # Return None if not found
-                return data_obj, ids_dict, score
-            except Exception as e:
-                last_exception = e
-                user_facing_error = None; should_stop_retries = False
-                error_context = f"Movie: '{title_arg}'"
+        # Create an AsyncRetrying instance
+        async_retryer = AsyncRetrying(
+            stop=stop_after_attempt(max_attempts),
+            wait=wait_fixed(wait_seconds),
+            retry=retry_if_exception(should_retry_api_error), # <-- REMOVE self.
+            reraise=True
+        )
 
-                # --- Consolidated Error Handling & Retry Logic ---
-                if isinstance(e, (TMDbException, req_exceptions.HTTPError)):
-                    msg_lower = str(e).lower(); status_code = 0
-                    if isinstance(e, req_exceptions.HTTPError): status_code = getattr(getattr(e, 'response', None), 'status_code', 0)
+        try:
+            log.debug(f"Attempting TMDB movie fetch for '{title_arg}' ({year_arg}) with tenacity.")
+            # The function to call with retries is self._run_sync.
+            # Its arguments are (self._sync_tmdb_movie_fetch, title_arg, year_arg, lang).
+            data_obj, ids_dict, score = await async_retryer(
+                self._run_sync, self._sync_tmdb_movie_fetch, title_arg, year_arg, lang
+            )
 
-                    if "invalid api key" in msg_lower or status_code == 401 or "authentication failed" in msg_lower:
-                        user_facing_error = f"Invalid TMDB API Key or Authentication Failed ({error_context}). Please check your key."
-                        log.error(f"{user_facing_error} Details: {e}"); should_stop_retries = True
-                    elif status_code == 403:
-                        user_facing_error = f"TMDB API request forbidden ({error_context}). Check API key permissions."
-                        log.error(f"{user_facing_error} Details: {e}"); should_stop_retries = True
-                    elif "resource not found" in msg_lower or status_code == 404:
-                        log.warning(f"TMDB resource not found {error_context}. Error: {e}")
-                        return None, None, None # Definitive not found, stop retries
-                    else: log.warning(f"Attempt {attempt + 1} TMDB API error ({error_context}): {type(e).__name__}: {e}")
+            # _sync_tmdb_movie_fetch returns (None, None, None) for "not found" or no match.
+            # Tenacity doesn't retry if no exception is raised.
+            if data_obj is None and ids_dict is None and score is None:
+                log.info(f"TMDB movie '{title_arg}' ({year_arg}) not found or no match (returned None from sync).")
+                return None, None, None # Explicitly return for clarity
+            return data_obj, ids_dict, score
 
-                elif isinstance(e, (req_exceptions.ConnectionError, req_exceptions.Timeout)):
-                     log.warning(f"Attempt {attempt + 1} failed ({error_context}): Network connection error: {type(e).__name__}: {e}")
-                else:
-                     if isinstance(e, AttributeError) and '_sync_tmdb_movie_fetch' in str(e):
-                         log.critical(f"INTERNAL ERROR: AttributeError persists after fix for _sync_tmdb_movie_fetch? Error: {e}", exc_info=True)
-                         user_facing_error = f"Internal attribute error fetching TMDB metadata ({error_context})."
-                         should_stop_retries = True
-                     # Check for the TypeError from incorrect search arguments
-                     elif isinstance(e, TypeError) and "got an unexpected keyword argument 'year'" in str(e):
-                          log.critical(f"INTERNAL ERROR: Incorrect keyword argument 'year' passed to Movie.search. Error: {e}", exc_info=True)
-                          user_facing_error = f"Internal error calling TMDB movie search function ({error_context})."
-                          should_stop_retries = True
-                     else:
-                         log.warning(f"Attempt {attempt + 1} failed ({error_context}): Unexpected error: {type(e).__name__}: {e}", exc_info=True)
+        except RetryError as e:
+            last_exception = e.last_attempt.exception()
+            log.error(f"All {max_attempts} retry attempts failed for TMDB movie '{title_arg}'. Last error: {type(last_exception).__name__}: {last_exception}")
+            error_context = f"Movie: '{title_arg}'"
+            final_error_msg = f"Failed to fetch TMDB metadata ({error_context}) after {max_attempts} attempts."
+            if isinstance(last_exception, (req_exceptions.ConnectionError, req_exceptions.Timeout)):
+                final_error_msg += " Check network connection."
+            elif isinstance(last_exception, req_exceptions.HTTPError) and \
+                 500 <= getattr(getattr(last_exception, 'response', None), 'status_code', 0) <= 599:
+                final_error_msg += " Likely a temporary TMDB server issue."
+            raise MetadataError(final_error_msg) from last_exception
 
-                if should_stop_retries:
-                    raise MetadataError(user_facing_error or f"Unrecoverable error fetching TMDB metadata ({error_context}).") from e
-
-                if not should_retry_api_error(e):
-                    log.error(f"Non-retryable error occurred ({error_context}): {type(e).__name__}")
-                    user_facing_error = user_facing_error or f"Non-retryable error fetching TMDB metadata ({error_context}). Details: {e}"
-                    raise MetadataError(user_facing_error) from e
-
-                # Retry logic
-                if attempt < max_attempts - 1:
-                    log.info(f"Retrying TMDB movie fetch for '{title_arg}' in {wait_seconds}s... ({attempt+1}/{max_attempts})")
-                    await asyncio.sleep(wait_seconds)
-                else:
-                    log.error(f"All {max_attempts} retry attempts failed for TMDB movie '{title_arg}'. Last error: {last_exception}")
-                    final_error_msg = f"Failed to fetch TMDB metadata ({error_context}) after {max_attempts} attempts."
-                    # Add context based on last error type
-                    if isinstance(last_exception, (req_exceptions.ConnectionError, req_exceptions.Timeout)): final_error_msg += " Check network connection."
-                    elif isinstance(last_exception, req_exceptions.HTTPError) and 500 <= getattr(getattr(last_exception, 'response', None), 'status_code', 0) <= 599: final_error_msg += " Likely a temporary TMDB server issue."
-                    elif isinstance(last_exception, TypeError) and "unexpected keyword argument 'year'" in str(last_exception): final_error_msg += " Internal library call error."
-                    raise MetadataError(final_error_msg) from last_exception
-
-        # Fallback return if loop somehow completes without success or specific error
-        return None, None, None
+        except Exception as e:
+            # Catches exceptions not retried by tenacity (should_retry_api_error was False)
+            # or other unexpected errors outside the retryer's scope.
+            log.error(f"Non-retryable or unexpected error during TMDB movie fetch for '{title_arg}': {type(e).__name__}: {e}", exc_info=True)
+            error_context = f"Movie: '{title_arg}'"; user_facing_error = None
+            if isinstance(e, (TMDbException, req_exceptions.HTTPError)):
+                msg_lower = str(e).lower(); status_code = 0
+                if isinstance(e, req_exceptions.HTTPError): status_code = getattr(getattr(e, 'response', None), 'status_code', 0)
+                if "invalid api key" in msg_lower or status_code == 401 or "authentication failed" in msg_lower:
+                    user_facing_error = f"Invalid TMDB API Key or Authentication Failed ({error_context}). Please check your key."
+                elif status_code == 403:
+                    user_facing_error = f"TMDB API request forbidden ({error_context}). Check API key permissions."
+                elif "resource not found" in msg_lower or status_code == 404: # Should be handled by _sync... returning None
+                    log.warning(f"TMDB resource not found for {error_context} (unexpected non-retry path). Error: {e}")
+                    return None, None, None
+            final_error_msg = user_facing_error or f"Unrecoverable error fetching TMDB metadata ({error_context}). Details: {e}"
+            raise MetadataError(final_error_msg) from e
 
     async def _do_fetch_tmdb_series(self, title_arg, season_arg, episodes_arg, year_guess_arg=None, lang='en'):
-        """Async wrapper for TMDB series fetch with retries."""
-        # ... (This method remains the same as provided in the previous response) ...
-        attempts_cfg = self.cfg('api_retry_attempts', 3); wait_sec_cfg = self.cfg('api_retry_wait_seconds', 2)
-        max_attempts = max(1, attempts_cfg if attempts_cfg is not None else 3); wait_seconds = max(0, wait_sec_cfg if wait_sec_cfg is not None else 2)
-        last_exception = None
+        max_attempts_cfg = self.cfg('api_retry_attempts', 3)
+        wait_sec_cfg = self.cfg('api_retry_wait_seconds', 2)
+        max_attempts = max(1, int(max_attempts_cfg)) if max_attempts_cfg is not None else 3
+        wait_seconds = float(wait_sec_cfg) if wait_sec_cfg is not None else 2.0
 
-        for attempt in range(max_attempts):
-            try:
-                log.debug(f"Attempt {attempt + 1}/{max_attempts} for TMDB series: '{title_arg}' S{season_arg}")
-                # Call the instance method via _run_sync
-                show_obj, ep_map, ids_dict, score = await self._run_sync(self._sync_tmdb_series_fetch, title_arg, season_arg, episodes_arg, year_guess_arg, lang)
-
-                if show_obj is None:
-                    log.info(f"TMDB series '{title_arg}' S{season_arg} not found or no match.")
-                    return None, None, None, None # Return None if not found
-                return show_obj, ep_map, ids_dict, score
-            except Exception as e:
-                last_exception = e; user_facing_error = None; should_stop_retries = False
-                error_context = f"Series: '{title_arg}' S{season_arg}"
-
-                if isinstance(e, (TMDbException, req_exceptions.HTTPError)):
-                    msg_lower = str(e).lower(); status_code = 0
-                    if isinstance(e, req_exceptions.HTTPError): status_code = getattr(getattr(e, 'response', None), 'status_code', 0)
-                    if "invalid api key" in msg_lower or status_code == 401 or "authentication failed" in msg_lower:
-                        user_facing_error = f"Invalid TMDB API Key or Authentication Failed ({error_context}). Please check your key."
-                        log.error(f"{user_facing_error} Details: {e}"); should_stop_retries = True
-                    elif status_code == 403:
-                        user_facing_error = f"TMDB API request forbidden ({error_context}). Check API key permissions."
-                        log.error(f"{user_facing_error} Details: {e}"); should_stop_retries = True
-                    elif "resource not found" in msg_lower or status_code == 404:
-                        log.warning(f"TMDB resource not found ({error_context}). Error: {e}")
-                        return None, None, None, None # Definitive not found
-                    else: log.warning(f"Attempt {attempt + 1} TMDB API error ({error_context}): {type(e).__name__}: {e}")
-                elif isinstance(e, (req_exceptions.ConnectionError, req_exceptions.Timeout)):
-                     log.warning(f"Attempt {attempt + 1} failed ({error_context}): Network connection error: {type(e).__name__}: {e}")
-                else:
-                    log.warning(f"Attempt {attempt + 1} failed ({error_context}): Unexpected error: {type(e).__name__}: {e}", exc_info=True)
-                    if isinstance(e, TypeError) and "_sync_tmdb_series_fetch() missing" in str(e):
-                        log.critical(f"INTERNAL ERROR: _sync_tmdb_series_fetch called incorrectly? Error: {e}")
-                        user_facing_error = f"Internal error calling sync TMDB function ({error_context})."
-                        should_stop_retries = True
-
-                if should_stop_retries: raise MetadataError(user_facing_error or f"Unrecoverable error fetching TMDB metadata ({error_context}).") from e
-                if not should_retry_api_error(e):
-                    log.error(f"Non-retryable error occurred ({error_context}).")
-                    user_facing_error = user_facing_error or f"Non-retryable error fetching TMDB metadata ({error_context}). Details: {e}"
-                    raise MetadataError(user_facing_error) from e
-
-                if attempt < max_attempts - 1:
-                    log.info(f"Retrying TMDB series fetch for '{title_arg}' S{season_arg} in {wait_seconds}s... ({attempt+1}/{max_attempts})")
-                    await asyncio.sleep(wait_seconds)
-                else:
-                    log.error(f"All {max_attempts} retry attempts failed for TMDB series '{title_arg}' S{season_arg}. Last error: {last_exception}")
-                    final_error_msg = f"Failed to fetch TMDB metadata ({error_context}) after {max_attempts} attempts."
-                    if isinstance(last_exception, (req_exceptions.ConnectionError, req_exceptions.Timeout)): final_error_msg += " Check network connection."
-                    elif isinstance(last_exception, req_exceptions.HTTPError) and 500 <= getattr(getattr(last_exception, 'response', None), 'status_code', 0) <= 599: final_error_msg += " Likely a temporary TMDB server issue."
-                    raise MetadataError(final_error_msg) from last_exception
-        return None, None, None, None # Fallback
+        async_retryer = AsyncRetrying(
+            stop=stop_after_attempt(max_attempts),
+            wait=wait_fixed(wait_seconds),
+            retry=retry_if_exception(should_retry_api_error), # <-- REMOVE self.
+            reraise=True
+        )
+        try:
+            log.debug(f"Attempting TMDB series fetch for '{title_arg}' S{season_arg} with tenacity.")
+            show_obj, ep_map, ids_dict, score = await async_retryer(
+                self._run_sync, self._sync_tmdb_series_fetch, title_arg, season_arg, episodes_arg, year_guess_arg, lang
+            )
+            if show_obj is None:
+                log.info(f"TMDB series '{title_arg}' S{season_arg} not found or no match.")
+                return None, None, None, None
+            return show_obj, ep_map, ids_dict, score
+        except RetryError as e:
+            last_exception = e.last_attempt.exception()
+            log.error(f"All {max_attempts} retry attempts failed for TMDB series '{title_arg}' S{season_arg}. Last error: {type(last_exception).__name__}: {last_exception}")
+            error_context = f"Series: '{title_arg}' S{season_arg}"; final_error_msg = f"Failed to fetch TMDB metadata ({error_context}) after {max_attempts} attempts."
+            if isinstance(last_exception, (req_exceptions.ConnectionError, req_exceptions.Timeout)): final_error_msg += " Check network connection."
+            elif isinstance(last_exception, req_exceptions.HTTPError) and \
+                 500 <= getattr(getattr(last_exception, 'response', None), 'status_code', 0) <= 599: final_error_msg += " Likely a temporary TMDB server issue."
+            raise MetadataError(final_error_msg) from last_exception
+        except Exception as e:
+            log.error(f"Non-retryable or unexpected error during TMDB series fetch for '{title_arg}' S{season_arg}: {type(e).__name__}: {e}", exc_info=True)
+            error_context = f"Series: '{title_arg}' S{season_arg}"; user_facing_error = None
+            if isinstance(e, (TMDbException, req_exceptions.HTTPError)):
+                msg_lower = str(e).lower(); status_code = 0
+                if isinstance(e, req_exceptions.HTTPError): status_code = getattr(getattr(e, 'response', None), 'status_code', 0)
+                if "invalid api key" in msg_lower or status_code == 401 or "authentication failed" in msg_lower:
+                    user_facing_error = f"Invalid TMDB API Key ({error_context})."
+                elif status_code == 403: user_facing_error = f"TMDB API request forbidden ({error_context})."
+                elif "resource not found" in msg_lower or status_code == 404:
+                    log.warning(f"TMDB resource not found ({error_context}) (unexpected non-retry path)."); return None, None, None, None
+            final_error_msg = user_facing_error or f"Unrecoverable error fetching TMDB metadata ({error_context}). Details: {e}"
+            raise MetadataError(final_error_msg) from e
 
     async def _do_fetch_tvdb_series(self, title_arg: str, season_num_arg: int, episodes_arg: tuple, tvdb_id_arg: Optional[int] = None, year_guess_arg: Optional[int] = None, lang: str = 'en'):
-        """Async wrapper for TVDB series fetch with retries."""
-        # ... (This method remains the same as provided in the previous response) ...
-        attempts_cfg = self.cfg('api_retry_attempts', 3); wait_sec_cfg = self.cfg('api_retry_wait_seconds', 2)
-        max_attempts = max(1, attempts_cfg if attempts_cfg is not None else 3); wait_seconds = max(0, wait_sec_cfg if wait_sec_cfg is not None else 2)
-        last_exception = None
+        max_attempts_cfg = self.cfg('api_retry_attempts', 3)
+        wait_sec_cfg = self.cfg('api_retry_wait_seconds', 2)
+        max_attempts = max(1, int(max_attempts_cfg)) if max_attempts_cfg is not None else 3
+        wait_seconds = float(wait_sec_cfg) if wait_sec_cfg is not None else 2.0
 
-        for attempt in range(max_attempts):
-            try:
-                log.debug(f"Attempt {attempt + 1}/{max_attempts} for TVDB series: '{title_arg}' S{season_num_arg}")
-                 # Call the instance method via _run_sync
-                show_dict, ep_map, ids_dict, score = await self._run_sync(self._sync_tvdb_series_fetch, title_arg, season_num_arg, episodes_arg, tvdb_id_arg, year_guess_arg, lang)
+        async_retryer = AsyncRetrying(
+            stop=stop_after_attempt(max_attempts),
+            wait=wait_fixed(wait_seconds),
+            retry=retry_if_exception(should_retry_api_error), # <-- REMOVE self.
+            reraise=True
+        )
+        try:
+            log.debug(f"Attempting TVDB series fetch for '{title_arg}' S{season_num_arg} with tenacity.")
+            # OLD:
+            # show_dict, ep_map, ids_dict, score = await async_retryer.call(
+            # self._run_sync, self._sync_tvdb_series_fetch, title_arg, season_num_arg, episodes_arg, tvdb_id_arg, year_guess_arg, lang
+            # )
 
-                if show_dict is None:
-                    log.info(f"TVDB series '{title_arg}' S{season_num_arg} not found or no match.")
-                    return None, None, None, None # Return None if not found
-                return show_dict, ep_map, ids_dict, score
-            except Exception as e:
-                last_exception = e; user_facing_error = None; should_stop_retries = False
-                error_context = f"TVDB Series: '{title_arg}' S{season_num_arg}"
-                msg_lower = str(e).lower()
-
-                if "unauthorized" in msg_lower or "api key" in msg_lower or ("response" in msg_lower and "401" in msg_lower):
-                     user_facing_error = f"Invalid TVDB API Key or Unauthorized ({error_context}). Please check your key."
-                     log.error(f"{user_facing_error} Details: {e}"); should_stop_retries = True
-                elif "failed to get" in msg_lower and ("not found" in msg_lower or "no record" in msg_lower or "404" in msg_lower):
-                     log.warning(f"TVDB resource not found ({error_context}). Error: {e}")
-                     return None, None, None, None # Definitive not found
-                elif isinstance(e, (req_exceptions.ConnectionError, req_exceptions.Timeout)):
-                     log.warning(f"Attempt {attempt + 1} failed ({error_context}): Network connection error to TVDB: {type(e).__name__}: {e}")
-                elif isinstance(e, req_exceptions.HTTPError):
-                     status_code = getattr(getattr(e, 'response', None), 'status_code', 0)
-                     if status_code == 403:
-                         user_facing_error = f"TVDB API request forbidden ({error_context}). Check API key permissions."
-                         log.error(f"{user_facing_error} Details: {e}"); should_stop_retries = True
-                     elif 500 <= status_code <= 599:
-                         log.warning(f"Attempt {attempt+1} TVDB API server error ({status_code}) ({error_context}): {e}")
-                     else: log.warning(f"Attempt {attempt + 1} TVDB API HTTP error ({status_code}) ({error_context}): {type(e).__name__}: {e}")
-                else:
-                    log.warning(f"Attempt {attempt + 1} failed ({error_context}): Unexpected TVDB error: {type(e).__name__}: {e}", exc_info=True)
-                    if isinstance(e, TypeError) and "_sync_tvdb_series_fetch() missing" in str(e):
-                        log.critical(f"INTERNAL ERROR: _sync_tvdb_series_fetch called incorrectly? Error: {e}")
-                        user_facing_error = f"Internal error calling sync TVDB function ({error_context})."
-                        should_stop_retries = True
-
-                if should_stop_retries: raise MetadataError(user_facing_error or f"Unrecoverable error fetching TVDB metadata ({error_context}).") from e
-                if not should_retry_api_error(e):
-                    log.error(f"Non-retryable error occurred ({error_context}).")
-                    user_facing_error = user_facing_error or f"Non-retryable error fetching TVDB metadata ({error_context}). Details: {e}"
-                    raise MetadataError(user_facing_error) from e
-
-                if attempt < max_attempts - 1:
-                    log.info(f"Retrying TVDB series fetch for '{title_arg}' S{season_num_arg} in {wait_seconds}s... ({attempt+1}/{max_attempts})")
-                    await asyncio.sleep(wait_seconds)
-                else:
-                    log.error(f"All {max_attempts} retry attempts failed for TVDB series '{title_arg}' S{season_num_arg}. Last error: {last_exception}")
-                    final_error_msg = f"Failed to fetch TVDB metadata ({error_context}) after {max_attempts} attempts."
-                    # Add context
-                    if isinstance(last_exception, (req_exceptions.ConnectionError, req_exceptions.Timeout)): final_error_msg += " Check network connection."
-                    elif isinstance(last_exception, req_exceptions.HTTPError) and 500 <= getattr(getattr(last_exception, 'response', None), 'status_code', 0) <= 599: final_error_msg += " Likely a temporary TVDB server issue."
-                    elif isinstance(last_exception, ValueError) and "not found" in str(last_exception).lower(): final_error_msg = f"TVDB resource not found ({error_context}) after {max_attempts} attempts."
-
-                    raise MetadataError(final_error_msg) from last_exception
-        return None, None, None, None # Fallback
+            # NEW:
+            show_dict, ep_map, ids_dict, score = await async_retryer(
+                self._run_sync, self._sync_tvdb_series_fetch, title_arg, season_num_arg, episodes_arg, tvdb_id_arg, year_guess_arg, lang
+            )
+            if show_dict is None:
+                log.info(f"TVDB series '{title_arg}' S{season_num_arg} not found or no match.")
+                return None, None, None, None
+            return show_dict, ep_map, ids_dict, score
+        except RetryError as e:
+            last_exception = e.last_attempt.exception()
+            log.error(f"All {max_attempts} retry attempts failed for TVDB series '{title_arg}' S{season_num_arg}. Last error: {type(last_exception).__name__}: {last_exception}")
+            error_context = f"TVDB Series: '{title_arg}' S{season_num_arg}"; final_error_msg = f"Failed to fetch TVDB metadata ({error_context}) after {max_attempts} attempts."
+            if isinstance(last_exception, (req_exceptions.ConnectionError, req_exceptions.Timeout)): final_error_msg += " Check network connection."
+            elif isinstance(last_exception, req_exceptions.HTTPError) and \
+                 500 <= getattr(getattr(last_exception, 'response', None), 'status_code', 0) <= 599: final_error_msg += " Likely a temporary TVDB server issue."
+            # TVDB library might raise ValueError for not found or auth issues directly
+            elif isinstance(last_exception, ValueError) and ("not found" in str(last_exception).lower() or "unauthorized" in str(last_exception).lower()):
+                 final_error_msg = f"TVDB Error ({error_context}): {last_exception}" # More direct message
+            raise MetadataError(final_error_msg) from last_exception
+        except Exception as e:
+            log.error(f"Non-retryable or unexpected error during TVDB series fetch for '{title_arg}' S{season_num_arg}: {type(e).__name__}: {e}", exc_info=True)
+            error_context = f"TVDB Series: '{title_arg}' S{season_num_arg}"; user_facing_error = None
+            msg_lower = str(e).lower()
+            if "unauthorized" in msg_lower or "api key" in msg_lower or ("response" in msg_lower and "401" in msg_lower):
+                 user_facing_error = f"Invalid TVDB API Key or Unauthorized ({error_context})."
+            elif isinstance(e, req_exceptions.HTTPError) and getattr(getattr(e, 'response', None), 'status_code', 0) == 403:
+                 user_facing_error = f"TVDB API request forbidden ({error_context})."
+            elif "failed to get" in msg_lower and ("not found" in msg_lower or "no record" in msg_lower or "404" in msg_lower):
+                 log.warning(f"TVDB resource not found ({error_context}) (unexpected non-retry path)."); return None, None, None, None
+            final_error_msg = user_facing_error or f"Unrecoverable error fetching TVDB metadata ({error_context}). Details: {e}"
+            raise MetadataError(final_error_msg) from e
 
     # --- Public Fetch Methods ---
 
