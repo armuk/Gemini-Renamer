@@ -13,6 +13,7 @@ platformdirs>=4.2.0    # For cross-platform directory management
 pymediainfo>=6.0.0     # For reading media file metadata (check latest)
 chardet>=5.0.0         # For subtitle encoding detection (optional, check latest)
 langcodes>=3.0.0       # For subtitle language parsing (optional, check latest)
+tenacity>=8.2.0        # For robust retrying logic
 
 # Metadata Provider Libraries (Choose based on what's actually used)
 rich>=13.0.0           # Enhanced terminal output (e.g., tables)
