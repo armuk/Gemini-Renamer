@@ -63,10 +63,6 @@ class RenamerEngine:
         if guess_info.get('year') and 'title' in guess_info and file_type != 'episode': return 'movie'
         log.debug(f"Could not determine type from guess: {guess_info}"); return 'unknown'
 
-    # --- _prepare_format_data and its helpers remain the same from your previous version ---
-    # _initialize_base_format_data, _add_scene_tags_to_format_data, etc.
-    # Ensure _finalize_episode_data_for_formatting sets data['ep_identifier']
-    # Ensure _apply_format_data_fallbacks sets data.setdefault('ep_identifier', ...)
     def _initialize_base_format_data(self, original_path: Path, guess_info: Optional[Dict]) -> Dict[str, Any]:
         if not isinstance(guess_info, dict):
             log.warning(f"Guess_info is not a dictionary for '{original_path.name}'. Using minimal fallbacks.")
@@ -173,7 +169,6 @@ class RenamerEngine:
     def _extract_and_add_stream_info_to_format_data(self, data: Dict[str, Any], original_path: Path, file_type: str):
         data.update({'resolution': '', 'vcodec': '', 'acodec': '', 'achannels': ''}) # Ensure keys exist
         if not self.cfg('extract_stream_info', False): return
-        # (Rest of stream info logic unchanged)
         stream_placeholders = {"{resolution}", "{vcodec}", "{acodec}", "{achannels}"}
         relevant_formats = []
         if file_type == 'series':
@@ -201,7 +196,6 @@ class RenamerEngine:
         return data
 
     def _format_new_name(self, media_info: MediaInfo, format_data: Dict) -> str:
-        # (No changes needed here for ProcessingStatus, but ensure it uses data['ep_identifier'] if format string does)
         mode = media_info.file_type; format_str = None; fallback_format = "{original_stem}_renamed"
         if mode == 'series':
             is_special = format_data.get('season') == 0
@@ -214,10 +208,9 @@ class RenamerEngine:
         else: log.error(f"Unexpected type '{mode}'. Using fallback."); format_str = fallback_format
         try:
             new_stem = format_str.format(**defaultdict(str, format_data))
-        except KeyError as e_key: # Catch specific KeyError for missing placeholders
+        except KeyError as e_key: 
             plan_message = f"[{ProcessingStatus.CONFIG_MISSING_FORMAT_STRING}] Failed formatting stem: Missing placeholder {e_key} in format '{format_str}'."
             log.error(plan_message + f" DataKeys={list(format_data.keys())}")
-            # We re-raise a RenamerError so plan_rename can catch it and set the plan status.
             raise RenamerError(plan_message) from e_key
         except Exception as e:
             plan_message = f"[{ProcessingStatus.INTERNAL_ERROR}] Failed formatting stem: {e}. Format='{format_str}'"
@@ -228,12 +221,10 @@ class RenamerEngine:
         final_stem, _ = os.path.splitext(sanitize_filename(new_stem + format_data.get('ext', '')))
         if not final_stem:
             log.warning(f"Stem empty after sanitation for '{media_info.original_path.name}'. Using original.")
-            # This could be a new ProcessingStatus like PLAN_INVALID_GENERATED_NAME
             return sanitize_filename(media_info.original_path.stem + format_data.get('ext', ''))
         return final_stem
 
     def _format_folder_path(self, media_info: MediaInfo, format_data: Dict) -> Optional[Path]:
-        # (No changes needed here for ProcessingStatus)
         if not self.cfg('create_folders'): return None
         mode = media_info.file_type; folder_format = None
         if mode == 'series':
@@ -249,14 +240,11 @@ class RenamerEngine:
             return Path(*parts)
         except KeyError as e_key:
             log.error(f"[{ProcessingStatus.CONFIG_MISSING_FORMAT_STRING}] Failed formatting folder: Missing placeholder {e_key} in format '{folder_format}'. DataKeys={list(format_data.keys())}")
-            # Optionally, you might want the plan to fail if folder formatting fails due to missing key
-            # For now, just returning None which means no folder change.
             return None
         except Exception as e:
             log.error(f"Failed formatting folder: {e}. Format='{folder_format}', DataKeys={list(format_data.keys())}"); return None
 
     def _format_associated_name(self, assoc_path: Path, new_video_stem: str, format_data: Dict) -> str:
-        # (No changes needed here for ProcessingStatus)
         original_extension = assoc_path.suffix
         sub_exts = {ext.lower() for ext in self.cfg.get_list('subtitle_extensions', ['.srt', '.sub'])}
         if original_extension.lower() in sub_exts:
@@ -285,10 +273,9 @@ class RenamerEngine:
         original_video_path_resolved: Path
         base_target_dir: Path
         try:
-            # Correctly access args through cfg helper instance
             base_target_dir = self.cfg.args.directory.resolve() if hasattr(self.cfg, 'args') and hasattr(self.cfg.args, 'directory') else video_path.parent.resolve()
             original_video_path_resolved = video_path.resolve()
-        except AttributeError: # Should not happen if args is always present on cfg_helper
+        except AttributeError: 
             log.warning("cfg.args.directory not found, using video parent for base_target_dir.")
             base_target_dir = video_path.parent.resolve()
             original_video_path_resolved = video_path.resolve()
@@ -310,11 +297,11 @@ class RenamerEngine:
                 return plan
             
             format_data = self._prepare_format_data(media_info)
-            media_info.data = format_data # Store for potential use elsewhere
+            media_info.data = format_data 
             log.debug(f"Data for formatting in plan_rename for '{video_path.name}': {format_data}")
 
-            new_video_stem = self._format_new_name(media_info, format_data) # Can raise RenamerError
-            if not new_video_stem or new_video_stem == video_path.stem and not self.cfg('create_folders'): # Check if stem is empty
+            new_video_stem = self._format_new_name(media_info, format_data) 
+            if not new_video_stem or new_video_stem == video_path.stem and not self.cfg('create_folders'): 
                  plan.status = 'skipped'
                  plan.message = f"[{ProcessingStatus.PLAN_INVALID_GENERATED_NAME}] Generated video stem is empty or unchanged (and no folder change). Original: '{video_path.stem}'"
                  return plan
@@ -323,7 +310,6 @@ class RenamerEngine:
             relative_folder = self._format_folder_path(media_info, format_data)
             target_dir = base_target_dir / relative_folder if relative_folder else original_video_path_resolved.parent
             
-            # Ensure target_dir is resolved for accurate comparison and use
             target_dir = target_dir.resolve()
             
             plan.created_dir_path = target_dir if relative_folder and target_dir != original_video_path_resolved.parent.resolve() else None
@@ -338,7 +324,7 @@ class RenamerEngine:
             vid_paths_differ = str(final_video_path_resolved).lower() != str(original_video_path_resolved).lower()
             vid_parent_dirs_differ = final_video_path_resolved.parent != original_video_path_resolved.parent
             
-            if vid_paths_differ or vid_parent_dirs_differ: # Ensure action if only parent dir changes
+            if vid_paths_differ or vid_parent_dirs_differ: 
                  log.debug(f"Plan Check Video: Paths Differ={vid_paths_differ}, Parent Dirs Differ={vid_parent_dirs_differ}")
                  planned_actions_dict[original_video_path_resolved] = RenameAction(
                      original_path=video_path, new_path=final_video_path,
@@ -363,10 +349,23 @@ class RenamerEngine:
                       )
 
             log.debug(f"Planned actions dict before 'no change' check for '{video_path.name}' ({len(planned_actions_dict)} actions): {planned_actions_dict}")
-            if not planned_actions_dict and not plan.created_dir_path:
-                 log.info(f"No actions planned for '{video_path.name}', path likely already correct.")
-                 plan.status = 'skipped'; plan.message = f"[{ProcessingStatus.PATH_ALREADY_CORRECT}] Path already correct for '{video_path.name}'."
-                 return plan
+            
+            if not planned_actions_dict:
+                # If no file rename/move actions are planned, check if only a directory creation was planned.
+                # If original video path is already IN the planned target directory, then it's truly "Path Already Correct".
+                # Otherwise, if a directory creation IS planned, it means the file needs to move into that new dir,
+                # even if its name doesn't change, which should have generated a 'move' action.
+                # This means if created_dir_path is set, planned_actions_dict should not be empty if a move is needed.
+                if not plan.created_dir_path: # No actions AND no new directory planned
+                     log.info(f"No actions planned for '{video_path.name}', path likely already correct and in correct folder.")
+                     plan.status = 'skipped'; plan.message = f"[{ProcessingStatus.PATH_ALREADY_CORRECT}] Path already correct for '{video_path.name}'."
+                     return plan
+                elif plan.created_dir_path and original_video_path_resolved.parent == plan.created_dir_path.resolve():
+                     # This means a dir was "planned" but the file is already in it, and names match.
+                     log.info(f"No rename actions for '{video_path.name}', and it's already in the target directory structure. Path correct.")
+                     plan.status = 'skipped'; plan.message = f"[{ProcessingStatus.PATH_ALREADY_CORRECT}] Path already correct for '{video_path.name}' (in target dir structure)."
+                     return plan
+
 
             conflict_mode = self.cfg('on_conflict', 'skip')
             final_target_paths: Set[Path] = {action.new_path.resolve() for action in planned_actions_dict.values()}
@@ -376,30 +375,29 @@ class RenamerEngine:
                  target_counts = defaultdict(list)
                  colliding_target_path_str = "UNKNOWN_TARGET"
                  for op, act in planned_actions_dict.items(): target_counts[act.new_path.resolve()].append(op)
-                 for target_path, sources in target_counts.items():
-                     if len(sources) > 1: colliding_target_path_str = target_path.name; break
+                 for target_path_resolved_val, sources in target_counts.items(): # Renamed target_path to avoid conflict
+                     if len(sources) > 1: colliding_target_path_str = target_path_resolved_val.name; break
                  plan.status = 'conflict_unresolved'
                  plan.message = f"[{ProcessingStatus.PLAN_MULTIPLE_SOURCES_TO_TARGET}] Multiple source files map to target '{colliding_target_path_str}'. Sources: {[p.name for p in sources]}"
                  return plan
             
-            for target_path_resolved in final_target_paths:
-                 if target_path_resolved.exists() and target_path_resolved not in original_paths_in_plan:
+            for target_path_resolved_val_check in final_target_paths: # Renamed target_path_resolved to avoid conflict
+                 if target_path_resolved_val_check.exists() and target_path_resolved_val_check not in original_paths_in_plan:
                       if conflict_mode == 'skip':
-                           plan.status = 'skipped' # If conflict is skip, the whole plan for this batch is skipped.
-                           plan.message = f"[{ProcessingStatus.PLAN_TARGET_EXISTS_SKIP_MODE}] Target '{target_path_resolved.name}' exists (mode: skip). Batch skipped."
+                           plan.status = 'skipped' 
+                           plan.message = f"[{ProcessingStatus.PLAN_TARGET_EXISTS_SKIP_MODE}] Target '{target_path_resolved_val_check.name}' exists (mode: skip). Batch skipped."
                            return plan
                       elif conflict_mode == 'fail':
-                           plan.status = 'conflict_unresolved' # Fail mode means unresolved by planning
-                           plan.message = f"[{ProcessingStatus.PLAN_TARGET_EXISTS_FAIL_MODE}] Target '{target_path_resolved.name}' exists (mode: fail)."
+                           plan.status = 'conflict_unresolved' 
+                           plan.message = f"[{ProcessingStatus.PLAN_TARGET_EXISTS_FAIL_MODE}] Target '{target_path_resolved_val_check.name}' exists (mode: fail)."
                            return plan
-                           # 'overwrite' and 'suffix' are handled by _prepare_live_actions
 
             plan.status = 'success'; plan.message = "Plan created successfully."
             plan.actions = list(planned_actions_dict.values())
 
-        except RenamerError as e: # Catch specific RenamerErrors from _format_new_name
-            log.error(f"RenamerError during planning for '{video_path.name}': {e}", exc_info=False) # No need for exc_info if message has enum
-            plan.status = 'failed'; plan.message = str(e) # Error message already has ProcessingStatus
+        except RenamerError as e: 
+            log.error(f"RenamerError during planning for '{video_path.name}': {e}", exc_info=False) 
+            plan.status = 'failed'; plan.message = str(e) 
             plan.actions = []
         except Exception as e:
             log.error(f"Unexpected error planning rename for '{video_path.name}': {e}", exc_info=True)
