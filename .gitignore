@@ -163,3 +163,4 @@ renamer.log
 env.txt
 .env
 rename_log.db
+.env.bak
