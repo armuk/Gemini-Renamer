@@ -1,101 +1,28 @@
 # rename_app/config_manager.py
 
 import os
-import sys
-import time
+import sys # For sys.stderr in critical prints
+import builtins # For builtins.print
 import pytomlpp
 import logging
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Set, Union 
+from typing import Optional, List, Dict, Any, Set, Union
 
-from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator # model_validator not used here, but fine
+
 try:
     import platformdirs
-    PLATFORMDIRS_AVAILABLE = True
+    PLATFORMDIRS_AVAILABLE = True # Export this for rename_main.py if needed there
 except ImportError:
     PLATFORMDIRS_AVAILABLE = False
+    platformdirs = None # Define for type checking if used directly below
 
-# --- RICH IMPORT FOR CONFIRMATION ---
-import builtins
-try:
-    from rich.console import Console as RichConsoleActual # Alias
-    from rich.prompt import Confirm as RichConfirm # Alias
-    from rich.text import Text as RichText # Alias for type hinting if needed
-    RICH_AVAILABLE_FOR_CONFIRM = True
-except ImportError:
-    RICH_AVAILABLE_FOR_CONFIRM = False
-    class RichConsoleActual: pass # Placeholder
-    class RichConfirm: pass # Placeholder
-    class RichText: pass # Placeholder
-
-    class Console: # Fallback
-        def __init__(self, quiet: bool = False, **kwargs: Any):
-            self.quiet_mode = quiet
-            self.is_interactive: bool = False 
-            self.is_jupyter: bool = False
-            self._live_display: Optional[Any] = None
-        
-        def print(self, *args: Any, **kwargs: Any) -> None:
-            output_dest = kwargs.pop('file', sys.stdout)
-            
-            if self.quiet_mode and output_dest != sys.stderr:
-                return
-
-            processed_args = []
-            for arg in args:
-                # Try to get plain text if it's a Rich Text or our fallback Text
-                if hasattr(arg, 'plain') and isinstance(getattr(arg, 'plain'), str):
-                    processed_args.append(getattr(arg, 'plain'))
-                elif hasattr(arg, 'text') and isinstance(getattr(arg, 'text'), str) and not callable(getattr(arg, 'text')): # For our fallback Text if .plain isn't primary
-                    processed_args.append(getattr(arg, 'text'))
-                elif isinstance(arg, str): # Already a string
-                    processed_args.append(arg)
-                else: # Fallback to str() for other types
-                    processed_args.append(str(arg))
-            
-            builtins.print(*processed_args, file=output_dest, **kwargs)
-            
-        def input(self, *args: Any, **kwargs: Any) -> str: 
-            return builtins.input(*args, **kwargs) 
-
-        def get_time(self) -> float:
-            return time.monotonic()
-
-        def log(self, *args: Any, **kwargs: Any) -> None:
-            if self.quiet_mode:
-                return
-            message_parts = [str(arg) for arg in args]
-            # Fallback log could print to stderr if necessary, or do nothing
-            # builtins.print(f"[LOG_FALLBACK_CFG] {' '.join(message_parts)}", file=sys.stderr)
-            pass
-
-        def set_live(self, live_display: Any, overflow: str = "crop", refresh_per_second: float = 4) -> None:
-            self._live_display = live_display
-            pass
-
-        def _clear_live(self) -> None:
-            self._live_display = None
-    
-    class Text: # Fallback Text, only used if Console.print receives it when RICH_AVAILABLE_FOR_CONFIRM = False
-        def __init__(self, text_content: str = "", style: str = ""):
-             self.text = text_content; self.style = style
-        def __str__(self) -> str: return self.text
-        @property
-        def plain(self) -> str: return self.text
-
-
-    class Confirm: # Fallback
-        @staticmethod
-        def ask(prompt_text: str, default: bool = False) -> bool:
-            # Fallback Confirm should still prompt, quiet mode handled by calling code
-            response = builtins.input(f"{prompt_text} [{'Y/n' if default else 'y/N'}]: ").strip().lower()
-            if not response: return default
-            return response == 'y'
-
-# Use aliased/fallback types
-ConsoleClass = RichConsoleActual if RICH_AVAILABLE_FOR_CONFIRM else Console
-ConfirmClass = RichConfirm if RICH_AVAILABLE_FOR_CONFIRM else Confirm
-# --- END RICH IMPORT ---
+# --- MODIFIED RICH IMPORT ---
+from rename_app.ui_utils import ( # Import from the new ui_utils module
+    ConsoleClass, ConfirmClass,
+    RICH_AVAILABLE_UI as RICH_AVAILABLE_FOR_CONFIRM # Use the flag from ui_utils
+)
+# --- END MODIFIED RICH IMPORT ---
 
 
 from dotenv import load_dotenv, find_dotenv, dotenv_values, set_key, unset_key
@@ -113,9 +40,9 @@ class BaseProfileSettings(BaseModel):
     use_metadata: Optional[bool] = Field(default=True, description="Fetch metadata from APIs.")
     extract_stream_info: Optional[bool] = Field(default=False, description="Extract technical stream info (resolution, codecs).")
     preserve_mtime: Optional[bool] = Field(default=False, description="Preserve original file modification time.")
-    ignore_dirs: Optional[List[str]] = Field(default_factory=list, description="List of exact directory names to ignore.") # e.g., ["@eaDir", ".recycle"]
+    ignore_dirs: Optional[List[str]] = Field(default_factory=list, description="List of exact directory names to ignore.")
     ignore_patterns: Optional[List[str]] = Field(
-        default_factory=lambda: ['.*', '*.partial', 'Thumbs.db', '*[sS]ample*'], # More useful defaults
+        default_factory=lambda: ['.*', '*.partial', 'Thumbs.db', '*[sS]ample*'],
         description="List of glob patterns (e.g., '*.tmp', '.*') to ignore."
     )
 
@@ -159,7 +86,7 @@ class BaseProfileSettings(BaseModel):
     # Caching Options
     cache_enabled: Optional[bool] = Field(default=True, description="Enable API response caching.")
     cache_directory: Optional[str] = Field(default=None, description="Custom cache directory (default: user cache dir).")
-    cache_expire_seconds: Optional[int] = Field(default=604800, ge=0, description="Cache expiration time in seconds (default: 7 days).") # 7 days
+    cache_expire_seconds: Optional[int] = Field(default=604800, ge=0, description="Cache expiration time in seconds (default: 7 days).")
 
     # Undo Options
     enable_undo: Optional[bool] = Field(default=True, description="Enable undo logging.")
@@ -170,7 +97,7 @@ class BaseProfileSettings(BaseModel):
     undo_integrity_hash_full: Optional[bool] = Field(default=False, description="Calculate full file hash for undo integrity check (SLOW, overrides hash_bytes).")
 
     # Logging Options
-    log_file: Optional[str] = Field(default=None, description="Path to log file (e.g., rename_app.log).") # Default "rename_app.log" if enabled
+    log_file: Optional[str] = Field(default=None, description="Path to log file (e.g., rename_app.log).")
     log_level: Optional[str] = Field(default='INFO', description="Logging level: DEBUG, INFO, WARNING, ERROR.")
 
     @field_validator('on_conflict', mode='before')
@@ -225,11 +152,11 @@ class BaseProfileSettings(BaseModel):
         if isinstance(v, str):
             val_list = [item.strip().lower() for item in v.split(',') if item.strip()]
         elif isinstance(v, list):
-            val_list = [str(item).strip().lower() for item in v if str(item).strip()] # Ensure items are strings
+            val_list = [str(item).strip().lower() for item in v if str(item).strip()]
         else:
             raise ValueError("series_metadata_preference must be a list or comma-separated string")
 
-        if not val_list: # Handle empty string or list after stripping
+        if not val_list:
             return default_pref
 
         if len(val_list) != 2:
@@ -239,7 +166,7 @@ class BaseProfileSettings(BaseModel):
         allowed = {'tmdb', 'tvdb'}
         if sources != allowed:
             raise ValueError(f"series_metadata_preference must be 'tmdb' and 'tvdb', got: {val_list}")
-        return [s.lower() for s in val_list] # Return in the user-specified order
+        return [s.lower() for s in val_list]
 
     @field_validator('preserve_mtime', mode='before')
     @classmethod
@@ -258,7 +185,7 @@ class DefaultSettings(BaseProfileSettings):
 
 class RootConfigModel(BaseModel):
     default: DefaultSettings = Field(default_factory=DefaultSettings)
-    model_config = {'extra': 'allow'} # Allow other profiles like [series_profile], [movie_profile]
+    model_config = {'extra': 'allow'}
 
 
 def generate_default_toml_content() -> str:
@@ -305,7 +232,7 @@ def generate_default_toml_content() -> str:
                     toml_value_str = "# (not set, uses internal default or None)"
                     content_lines.append(f"  # {key} = {toml_value_str}")
                     continue 
-                else: # Numbers, etc.
+                else: 
                     toml_value_str = str(default_value)
                 
                 content_lines.append(f"  {key} = {toml_value_str}")
@@ -320,8 +247,8 @@ def generate_default_toml_content() -> str:
 
 class ConfigManager:
     def __init__(self, config_path_override: Optional[Path] = None, interactive_fallback: bool = True, quiet_mode: bool = False):
-        self.console = ConsoleClass(quiet=quiet_mode) # Use ConsoleClass
-        self.quiet_mode = quiet_mode 
+        self.console = ConsoleClass(quiet=quiet_mode)
+        self.quiet_mode = quiet_mode
 
         self.config_path = self._resolve_config_path(config_path_override)
         self._raw_toml_content_str: Optional[str] = None
@@ -334,7 +261,7 @@ class ConfigManager:
         if config_path_override:
             p = Path(config_path_override)
             log.debug(f"Using explicit config path target: {p.resolve()}")
-            return p.resolve() 
+            return p.resolve()
             
         cwd_path = Path.cwd() / DEFAULT_CONFIG_FILENAME
         if cwd_path.is_file():
@@ -342,7 +269,7 @@ class ConfigManager:
             return cwd_path.resolve()
         
         user_config_path_obj: Optional[Path] = None
-        if PLATFORMDIRS_AVAILABLE:
+        if PLATFORMDIRS_AVAILABLE and platformdirs:
             try:
                 user_dir_str = platformdirs.user_config_dir("rename_app", "rename_app_author", ensure_exists=False)
                 user_config_path_obj = Path(user_dir_str) / DEFAULT_CONFIG_FILENAME
@@ -370,11 +297,11 @@ class ConfigManager:
             return user_config_path_obj.resolve()
         
         log.debug(f"No config file found. Defaulting to CWD for potential creation: {cwd_path.resolve()}")
-        return cwd_path.resolve() 
+        return cwd_path.resolve()
 
 
     def _create_default_config_interactively(self, target_path: Path) -> bool:
-        if self.quiet_mode: 
+        if self.quiet_mode:
             log.info("Quiet mode: Skipping interactive creation of default config file.")
             return False
 
@@ -393,19 +320,19 @@ class ConfigManager:
                     self.console.print(f"[bright_magenta]Please review and customize '{target_path}' as needed, especially API keys if not using an .env file.[/bright_magenta]")
                     log.info(f"Default configuration file created at {target_path}")
                     return True
-                except IOError as e:
-                    self.console.print(f"[bold red]Error creating configuration file: {e}[/bold red]", file=sys.stderr)
-                    log.error(f"Failed to write default config to {target_path}: {e}")
+                except IOError as e_io:
+                    self.console.print(f"[bold red]Error creating configuration file: {e_io}[/bold red]", file=sys.stderr)
+                    log.error(f"Failed to write default config to {target_path}: {e_io}")
                     return False
-                except Exception as e: 
-                    self.console.print(f"[bold red]An unexpected error occurred while creating the configuration file: {e}[/bold red]", file=sys.stderr)
-                    log.exception(f"Unexpected error creating default config at {target_path}: {e}")
+                except Exception as e_create:
+                    self.console.print(f"[bold red]An unexpected error occurred while creating the configuration file: {e_create}[/bold red]", file=sys.stderr)
+                    log.exception(f"Unexpected error creating default config at {target_path}: {e_create}")
                     return False
             else:
                 self.console.print("[yellow]Skipping default configuration file creation. Using internal defaults.[/yellow]")
                 log.info("User opted out of creating a default configuration file.")
                 return False
-        except KeyboardInterrupt: 
+        except KeyboardInterrupt:
             self.console.print("\n[yellow]Config creation cancelled by user.[/yellow]", file=sys.stderr)
             log.warning("User cancelled config creation during interactive prompt.")
             return False
@@ -424,18 +351,18 @@ class ConfigManager:
         if self.config_path.is_file():
             try:
                 self._raw_toml_content_str = self.config_path.read_text(encoding='utf-8')
-                if not self._raw_toml_content_str.strip(): 
+                if not self._raw_toml_content_str.strip():
                     log.warning(f"Config file '{self.config_path}' is empty. Using internal defaults.")
                     self._raw_toml_content_str = "# Config file was empty.\n"
                     return RootConfigModel().model_dump(exclude_unset=False, by_alias=False)
                 cfg_dict = pytomlpp.loads(self._raw_toml_content_str)
                 log.info(f"Loaded configuration from '{self.config_path}'")
-            except pytomlpp.DecodeError as e:
-                raise ConfigError(f"Failed to parse TOML config '{self.config_path}': {e}")
-            except OSError as e:
-                self._raw_toml_content_str = f"# Error reading config file: {e}\n" 
-                raise ConfigError(f"Failed to read config file '{self.config_path}': {e}")
-        else: 
+            except pytomlpp.DecodeError as e_toml:
+                raise ConfigError(f"Failed to parse TOML config '{self.config_path}': {e_toml}")
+            except OSError as e_os:
+                self._raw_toml_content_str = f"# Error reading config file: {e_os}\n"
+                raise ConfigError(f"Failed to read config file '{self.config_path}': {e_os}")
+        else:
             log.warning(f"Config file not found at '{self.config_path}' and not created (interactive_fallback={interactive_fallback}). Using internal defaults.")
             self._raw_toml_content_str = "# Config file not found or empty.\n"
             return RootConfigModel().model_dump(exclude_unset=False, by_alias=False)
@@ -444,31 +371,31 @@ class ConfigManager:
             validated_config = RootConfigModel.model_validate(cfg_dict)
             log.debug("Config validation successful.")
             return validated_config.model_dump(exclude_unset=False, by_alias=False)
-        except ValidationError as e:
-            error_details = e.errors()
+        except ValidationError as e_val:
+            error_details = e_val.errors()
             error_msgs = [f"  - Field `{' -> '.join(map(str, err['loc']))}`: {err['msg']}" for err in error_details]
             error_summary = f"Config file '{self.config_path}' validation failed:\n" + "\n".join(error_msgs)
             log.error(error_summary)
-            if config_file_existed_initially: 
-                raise ConfigError(error_summary) from e
-            else: 
+            if config_file_existed_initially:
+                raise ConfigError(error_summary) from e_val
+            else:
                 log.critical(f"Newly created default config FAILED validation. This is an internal error. {error_summary}")
                 self.console.print(f"[bold red]INTERNAL ERROR: The generated default configuration is invalid. Please report this.[/bold red]", file=sys.stderr)
                 self.console.print(error_summary, file=sys.stderr)
                 return RootConfigModel().model_dump(exclude_unset=False, by_alias=False)
-        except Exception as e: 
-            self._raw_toml_content_str = f"# Unexpected error loading config: {e}\n"
-            log.exception(f"Unexpected error loading/validating config '{self.config_path}': {e}")
-            raise ConfigError(f"Unexpected error loading/validating config '{self.config_path}': {e}")
+        except Exception as e_load_val:
+            self._raw_toml_content_str = f"# Unexpected error loading config: {e_load_val}\n"
+            log.exception(f"Unexpected error loading/validating config '{self.config_path}': {e_load_val}")
+            raise ConfigError(f"Unexpected error loading/validating config '{self.config_path}': {e_load_val}")
 
     def get_raw_toml_content(self) -> Optional[str]:
         return self._raw_toml_content_str
 
     def _load_env_keys(self) -> Dict[str, Optional[str]]:
         keys: Dict[str, Optional[str]] = {}
-        env_path: Union[str, Path, None] = None 
+        env_path: Union[str, Path, None] = None
         try:
-            env_path = find_dotenv(usecwd=True) 
+            env_path = find_dotenv(usecwd=True)
             if env_path:
                 log.debug(f"Loading environment variables from: {env_path}")
                 load_dotenv(dotenv_path=env_path)
@@ -476,10 +403,10 @@ class ConfigManager:
                 log.debug(".env file not found by find_dotenv. Checking os.getenv directly.")
         except Exception as e:
             log.warning(f"Error accessing or processing .env file: {e}")
-        
+
         keys['tmdb_api_key'] = os.getenv("TMDB_API_KEY")
         keys['tvdb_api_key'] = os.getenv("TVDB_API_KEY")
-        keys['tmdb_language'] = os.getenv("TMDB_LANGUAGE") 
+        keys['tmdb_language'] = os.getenv("TMDB_LANGUAGE")
 
         if any(v for k, v in keys.items() if k.endswith('_api_key')):
              log_msg_source = ".env file" if env_path and Path(env_path).exists() else "environment variables"
@@ -492,19 +419,13 @@ class ConfigManager:
 
     def get_value(self, key: str, profile: str = 'default', command_line_value: Any = None, default_value: Any = None) -> Any:
         if command_line_value is not None:
-            bool_optional_keys: Set[str] = { 
-                'recursive', 'use_metadata', 'create_folders', 'enable_undo',
-                'scene_tags_in_filename', 'subtitle_encoding_detection',
-                'extract_stream_info', 'preserve_mtime',
-                'undo_integrity_hash_full'
-            }
             if key == 'series_metadata_preference' and isinstance(command_line_value, str):
-                try: 
+                try:
                     validated_list = BaseProfileSettings.model_fields['series_metadata_preference'].validate(command_line_value)
                     return validated_list
                 except ValueError:
                     log.warning(f"Invalid command-line value for {key}: '{command_line_value}'. Ignoring.")
-            else: 
+            else:
                 return command_line_value
 
         if key == 'tmdb_language' and self._api_keys.get('tmdb_language'):
@@ -513,21 +434,20 @@ class ConfigManager:
         profile_settings_dict = self._config.get(profile, {})
         if isinstance(profile_settings_dict, dict) and key in profile_settings_dict:
             val_from_profile = profile_settings_dict[key]
-            if val_from_profile is not None: 
+            if val_from_profile is not None:
                 if key == 'series_metadata_preference' and not (isinstance(val_from_profile, list) and len(val_from_profile) == 2 and set(s.lower() for s in val_from_profile) == {'tmdb', 'tvdb'}):
                     log.warning(f"Invalid config value for '{key}' in profile '{profile}'. Using default from model.")
                 else:
                     return val_from_profile
-        
-        default_settings_dict = self._config.get('default', {}) 
+
+        default_settings_dict = self._config.get('default', {})
         if isinstance(default_settings_dict, dict) and key in default_settings_dict:
             val_from_default_section = default_settings_dict[key]
-            if val_from_default_section is not None: 
+            if val_from_default_section is not None:
                 if key == 'series_metadata_preference' and not (isinstance(val_from_default_section, list) and len(val_from_default_section) == 2 and set(s.lower() for s in val_from_default_section) == {'tmdb', 'tvdb'}):
                     log.warning(f"Invalid config value for '{key}' in profile 'default'. Using default from model.")
                 else:
                     return val_from_default_section
-        
         return default_value
 
     def get_api_key(self, service_name: str) -> Optional[str]:
@@ -536,33 +456,32 @@ class ConfigManager:
 
     def get_profile_settings(self, profile: str = 'default') -> Dict[str, Any]:
         base_defaults = DefaultSettings().model_dump(exclude_unset=False, by_alias=False)
-        
+
         default_section_settings = self._config.get('default', {})
         if isinstance(default_section_settings, dict):
             for k, v in default_section_settings.items():
-                if v is not None or k not in base_defaults: 
+                if v is not None or k not in base_defaults:
                     base_defaults[k] = v
 
-        final_settings = base_defaults.copy() 
+        final_settings = base_defaults.copy()
 
         if profile != 'default' and profile in self._config:
             profile_specific_data = self._config.get(profile, {})
             if isinstance(profile_specific_data, dict):
                  for k, v in profile_specific_data.items():
-                     if v is not None: 
+                     if v is not None:
                          final_settings[k] = v
             else:
                  log.warning(f"Profile '{profile}' in config is not a dictionary. Skipping merge for this profile.")
         elif profile != 'default':
             log.debug(f"Profile '{profile}' not found in config. Using effectively merged default settings.")
-            
         return final_settings
 
 
 class ConfigHelper:
     def __init__(self, config_manager: ConfigManager, args_ns: argparse.Namespace):
         self.manager = config_manager
-        self.args = args_ns 
+        self.args = args_ns
         self.profile = getattr(args_ns, 'profile', 'default') or 'default'
 
     def __call__(self, key: str, default_value: Any = None, arg_value: Any = None) -> Any:
@@ -575,22 +494,24 @@ class ConfigHelper:
     def get_list(self, key: str, default_value: Optional[List[Any]] = None) -> List[Any]:
         cmd_line_val_str = getattr(self.args, key, None)
         cmd_line_list: Optional[List[str]] = None
-        if isinstance(cmd_line_val_str, str): 
+        if isinstance(cmd_line_val_str, str):
             cmd_line_list = [item.strip() for item in cmd_line_val_str.split(',') if item.strip()]
-        
-        val = self.manager.get_value(key, self.profile, cmd_line_list, None) 
+
+        val = self.manager.get_value(key, self.profile, cmd_line_list, None)
 
         if isinstance(val, list):
             return val
-        elif isinstance(val, str): 
+        elif isinstance(val, str):
             return [item.strip() for item in val.split(',') if item.strip()]
-        
+
         return default_value if isinstance(default_value, list) else []
 
 def interactive_api_setup(dotenv_path_override: Optional[Path] = None, quiet_mode: bool = False) -> bool:
-    console = ConsoleClass(quiet=quiet_mode) # Use ConsoleClass
+    # This function now uses ConsoleClass and ConfirmClass imported from ui_utils
+    # which are already quiet-aware or have fallbacks.
+    console = ConsoleClass(quiet=quiet_mode)
 
-    if quiet_mode: 
+    if quiet_mode:
         builtins.print("ERROR: Interactive API setup cannot run in quiet mode (config_manager).", file=sys.stderr)
         return False
 
@@ -601,11 +522,11 @@ def interactive_api_setup(dotenv_path_override: Optional[Path] = None, quiet_mod
         resolved_dotenv_path = Path.cwd() / DEFAULT_DOTENV_FILENAME
 
     log.info(f"Starting interactive API setup. Target .env file: {resolved_dotenv_path}")
-    
+
     console.print(f"--- API Key Setup ---")
     console.print(f"This will guide you through setting up API keys in '{resolved_dotenv_path}'.")
     console.print("Press Enter to keep the current value (if any) or skip if not set.")
-    
+
     try:
         current_values: Dict[str, Optional[str]] = {}
         if resolved_dotenv_path.exists() and resolved_dotenv_path.is_file():
@@ -613,14 +534,14 @@ def interactive_api_setup(dotenv_path_override: Optional[Path] = None, quiet_mod
             current_values = dotenv_values(resolved_dotenv_path)
         else:
             log.debug(f".env file not found at {resolved_dotenv_path}. Will create a new one if keys are set.")
-        
+
         keys_to_set = {
             "TMDB_API_KEY": {"prompt": "Enter your TMDB API Key", "current": current_values.get("TMDB_API_KEY", "")},
             "TVDB_API_KEY": {"prompt": "Enter your TVDB API Key (V4)", "current": current_values.get("TVDB_API_KEY", "")},
             "TMDB_LANGUAGE": {"prompt": "Enter default TMDB language (e.g., en, de, fr)", "current": current_values.get("TMDB_LANGUAGE", "en"), "default": "en"}
         }
         updated_any = False
-        
+
         for key, info in keys_to_set.items():
             prompt_text = f"{info['prompt']}"
             current_val_display = info['current'] if info['current'] is not None else ""
@@ -628,14 +549,14 @@ def interactive_api_setup(dotenv_path_override: Optional[Path] = None, quiet_mod
 
             if current_val_display:
                 prompt_text += f" [current: {current_val_display}]"
-            elif default_val_display and key == "TMDB_LANGUAGE": 
+            elif default_val_display and key == "TMDB_LANGUAGE":
                 prompt_text += f" [default: {default_val_display}]"
             prompt_text += ": "
-            
+
             try:
-                user_input = console.input(prompt_text).strip() 
-                
-                if user_input: 
+                user_input = console.input(prompt_text).strip()
+
+                if user_input:
                     set_key(resolved_dotenv_path, key, user_input, quote_mode="never")
                     log.info(f"Set {key} to '{user_input}' in {resolved_dotenv_path}")
                     console.print(f"  ✓ {key} set to: {user_input}")
@@ -648,22 +569,22 @@ def interactive_api_setup(dotenv_path_override: Optional[Path] = None, quiet_mod
                 elif not user_input and current_val_display:
                     console.print(f"  - {key} kept as: {current_val_display}")
                 elif not user_input and not current_val_display and not default_val_display:
-                    if key in current_values and current_values[key] == "": 
-                         if resolved_dotenv_path.is_file(): 
+                    if key in current_values and current_values[key] == "":
+                         if resolved_dotenv_path.is_file():
                             unset_key(resolved_dotenv_path, key)
                             log.info(f"Removed empty {key} from {resolved_dotenv_path}")
                             console.print(f"  ✓ {key} removed (was empty).")
                             updated_any = True
-                         else: 
+                         else:
                             console.print(f"  - {key} skipped (no value provided).")
-                    else: 
+                    else:
                         console.print(f"  - {key} skipped (no value provided).")
 
             except KeyboardInterrupt:
                 console.print("\nSetup cancelled by user.", file=sys.stderr)
                 log.warning("API setup cancelled by user during input.")
                 return False
-            except Exception as e_input: 
+            except Exception as e_input:
                 log.error(f"Error during input for {key}: {e_input}", exc_info=True)
                 console.print(f"  ✗ Error processing input for {key}. Skipping.", file=sys.stderr)
 
@@ -673,11 +594,11 @@ def interactive_api_setup(dotenv_path_override: Optional[Path] = None, quiet_mod
             console.print("\nNo changes made to .env file.")
         console.print("--- Setup Complete ---")
         return True
-    except IOError as e_io: 
+    except IOError as e_io:
         log.error(f"IOError during API setup writing to {resolved_dotenv_path}: {e_io}", exc_info=True)
         console.print(f"\nError: Could not write to .env file at '{resolved_dotenv_path}'. Check permissions.", file=sys.stderr)
         return False
-    except Exception as e_main: 
+    except Exception as e_main:
         log.exception(f"An unexpected error occurred during interactive API setup: {e_main}")
         console.print(f"\nAn unexpected error occurred: {e_main}", file=sys.stderr)
         return False

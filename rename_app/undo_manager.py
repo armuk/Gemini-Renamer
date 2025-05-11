@@ -1,106 +1,51 @@
 # rename_app/undo_manager.py
 import sqlite3
 import logging
-import sys
+import sys # For sys.stderr
+import builtins # For builtins.print
 import time
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
-import time
-import os
-import fnmatch
+import os # os.rename, os.utime
+import fnmatch # Not used, but was in original. Can be removed if truly unused.
 import hashlib
 import shutil
 from typing import Optional, Tuple, List, Dict, Any
 
-# --- RICH IMPORTS ---
-import builtins
-try:
-    from rich.console import Console as RichConsoleActual # Use alias to avoid conflict
-    from rich.table import Table as RichTable # Use alias
-    from rich.text import Text as RichText # Use alias
-    RICH_AVAILABLE = True
-except ImportError:
-    RICH_AVAILABLE = False
-    class RichConsoleActual: pass # Placeholder for type hinting if needed
-    class RichTable: pass # Placeholder
-    class RichText: pass # Placeholder
-
-    class Console: # Fallback
-        def __init__(self, quiet: bool = False, **kwargs: Any):
-            self.quiet_mode = quiet
-            self.is_interactive: bool = False 
-            self.is_jupyter: bool = False
-            self._live_display: Optional[Any] = None
-        
-        def print(self, *args: Any, **kwargs: Any) -> None:
-            output_dest = kwargs.pop('file', sys.stdout)
-            
-            if self.quiet_mode and output_dest != sys.stderr:
-                return
-
-            processed_args = []
-            for arg in args:
-                if hasattr(arg, 'plain') and isinstance(getattr(arg, 'plain'), str):
-                    processed_args.append(getattr(arg, 'plain'))
-                elif hasattr(arg, 'text') and isinstance(getattr(arg, 'text'), str) and not callable(getattr(arg, 'text')):
-                    processed_args.append(getattr(arg, 'text'))
-                elif isinstance(arg, str):
-                    processed_args.append(arg)
-                else:
-                    processed_args.append(str(arg))
-            
-            builtins.print(*processed_args, file=output_dest, **kwargs)
-            
-        def input(self, *args: Any, **kwargs: Any) -> str: 
-            return builtins.input(*args, **kwargs) 
-
-        def get_time(self) -> float:
-            return time.monotonic()
-
-        def log(self, *args: Any, **kwargs: Any) -> None:
-            if self.quiet_mode:
-                return
-            message_parts = [str(arg) for arg in args]
-            # builtins.print(f"[LOG_FALLBACK_UNDO] {' '.join(message_parts)}", file=sys.stderr)
-            pass
-
-        def set_live(self, live_display: Any, overflow: str = "crop", refresh_per_second: float = 4) -> None:
-            self._live_display = live_display
-            pass
-
-        def _clear_live(self) -> None:
-            self._live_display = None
-
-    class Table:
-        def __init__(self, *args: Any, **kwargs: Any) -> None: pass
-        def add_column(self, *args: Any, **kwargs: Any) -> None: pass
-        def add_row(self, *args: Any, **kwargs: Any) -> None: pass
-    
-    class Text:
-        def __init__(self, text: str = "", style: str = ""): 
-            self.text = text
-            self.style = style
-        def __str__(self) -> str: 
-            return self.text
-        @property
-        def plain(self) -> str: 
-            return self.text
-
-# Use the aliased Rich types or fallbacks
-ConsoleClass = RichConsoleActual if RICH_AVAILABLE else Console
-TableClass = RichTable if RICH_AVAILABLE else Table
-TextClass = RichText if RICH_AVAILABLE else Text
-# --- END RICH IMPORTS ---
+# --- MODIFIED RICH IMPORTS ---
+from rename_app.ui_utils import (
+    ConsoleClass, TableClass, TextClass, ConfirmClass, # Added ConfirmClass
+    RICH_AVAILABLE_UI as RICH_AVAILABLE, RichConsoleActual # Import RichConsoleActual for isinstance
+)
+# --- END MODIFIED RICH IMPORTS ---
 
 from .exceptions import RenamerError, FileOperationError
+from .config_manager import ConfigHelper # For type hinting cfg_helper
 
 log = logging.getLogger(__name__)
-TEMP_SUFFIX_PREFIX = ".renametmp_"
+TEMP_SUFFIX_PREFIX = ".renametmp_" # Should be same as file_system_ops.py
 MTIME_TOLERANCE = 1.0
 HASH_CHUNK_SIZE = 65536
 
+# Helper to print to stderr, adapted for use within this module
+def _print_stderr_message_undo(console_obj: ConsoleClass, message: Any, is_quiet: bool, is_rich_available: bool):
+    if is_rich_available and isinstance(console_obj, RichConsoleActual):
+        if not is_quiet:
+            try:
+                # Create a temporary Rich console for stderr to print styled message
+                console_stderr_temp = RichConsoleActual(file=sys.stderr, width=console_obj.width) # type: ignore
+                console_stderr_temp.print(message)
+                return
+            except Exception: # Fallback if temp console fails
+                pass
+        plain_message = message.plain if hasattr(message, 'plain') else str(message)
+        builtins.print(plain_message, file=sys.stderr)
+    else:
+        console_obj.print(message, file=sys.stderr)
+
+
 class UndoManager:
-    def __init__(self, cfg_helper, quiet_mode: bool = False): 
+    def __init__(self, cfg_helper: ConfigHelper, quiet_mode: bool = False, console_instance: Optional[ConsoleClass] = None):
         self.cfg = cfg_helper
         self.db_path: Optional[Path] = None
         self.is_enabled: bool = False
@@ -109,19 +54,22 @@ class UndoManager:
         self.use_full_hash: bool = False
         
         self.quiet_mode = quiet_mode
-        self.console = ConsoleClass(quiet=self.quiet_mode) 
+        if console_instance:
+            self.console = console_instance
+        else:
+            self.console = ConsoleClass(quiet=self.quiet_mode)
         
         try:
             self.is_enabled = self.cfg('enable_undo', False)
             if self.is_enabled:
                 self.db_path = self._resolve_db_path()
-                if self.db_path: 
+                if self.db_path:
                     self._init_db()
-                else: 
+                else:
                     self.is_enabled = False
                     log.error("UndoManager: DB path not resolved, disabling undo.")
 
-                if self.is_enabled: 
+                if self.is_enabled:
                     self.check_integrity = self.cfg('undo_check_integrity', False)
                     self.use_full_hash = self.cfg('undo_integrity_hash_full', False)
                     try:
@@ -164,7 +112,6 @@ class UndoManager:
             log.error(f"Cannot resolve or create undo database path: {e}")
             return None
 
-
     def _connect(self) -> Optional[sqlite3.Connection]:
         if not self.db_path:
             log.error("Cannot connect to undo database: path not resolved or invalid.")
@@ -188,7 +135,7 @@ class UndoManager:
         try:
             conn = self._connect()
             if not conn:
-                self.is_enabled = False 
+                self.is_enabled = False
                 log.error("UndoManager: Database connection failed during init. Disabling undo.")
                 return
 
@@ -211,7 +158,7 @@ class UndoManager:
             conn.commit()
         except sqlite3.Error as e:
             log.error(f"Failed to initialize undo database schema: {e}")
-            self.is_enabled = False 
+            self.is_enabled = False
         except Exception as e:
             log.exception(f"Unexpected error during undo database initialization: {e}")
             self.is_enabled = False
@@ -235,7 +182,7 @@ class UndoManager:
                     chunk = f.read(self.hash_check_bytes)
                     hasher.update(chunk if chunk else b'')
                 else:
-                    return None 
+                    return None
             return hasher.hexdigest()
         except FileNotFoundError:
             log.warning(f"Cannot calculate hash: File not found '{file_path}'")
@@ -259,7 +206,7 @@ class UndoManager:
 
         if can_stat:
             try:
-                if orig_p.is_file(): 
+                if orig_p.is_file():
                     stat_info = orig_p.stat()
                     original_size = stat_info.st_size
                     original_mtime = stat_info.st_mtime
@@ -284,7 +231,7 @@ class UndoManager:
             return True
         except sqlite3.IntegrityError as e:
             log.warning(f"Duplicate entry in rename log for '{original_path}' ('{batch_id}'): {e}.")
-            return False 
+            return False
         except sqlite3.Error as e:
             log.error(f"DB error log_action for '{original_path}' ('{batch_id}'): {e}")
             return False
@@ -333,10 +280,10 @@ class UndoManager:
         expire_days_cfg = self.cfg('undo_expire_days', 30)
         try:
             expire_days = int(expire_days_cfg if expire_days_cfg is not None else 30)
-            if expire_days < 0: 
+            if expire_days < 0:
                 log.info("Undo expiration days set to -1 (forever). Skipping prune.")
                 return
-            if expire_days == 0: 
+            if expire_days == 0:
                 log.info("Undo expiration days set to 0 (session only). Pruning all except current session if identifiable.")
                 pass
         except (ValueError, TypeError):
@@ -468,11 +415,12 @@ class UndoManager:
             return cursor.fetchall()
         except sqlite3.Error as e:
             log.error(f"Error fetching undo actions for batch '{batch_id}': {e}")
-            raise 
+            raise
 
     def _display_undo_preview_table(self, actions: List[sqlite3.Row], batch_id: str):
+        # self.console is already quiet-aware from __init__
         self.console.print("Operations to be reverted (new -> original):")
-        preview_table = TableClass(title=f"Undo Plan for Batch: {batch_id}", show_header=True, header_style="bold magenta") 
+        preview_table = TableClass(title=f"Undo Plan for Batch: {batch_id}", show_header=True, header_style="bold magenta")
         preview_table.add_column("ID", style="dim", width=5, justify="right")
         preview_table.add_column("Status", style="yellow", width=10)
         preview_table.add_column("Type", width=4)
@@ -502,10 +450,10 @@ class UndoManager:
                 target_path_str = str(orig_p)
                 integrity_msg = "N/A (Temp File)"
             elif status == 'created_dir':
-                current_path_str = str(orig_p) 
+                current_path_str = str(orig_p)
                 target_path_str = "[red]Remove Directory[/red]"
                 integrity_msg = "N/A (Directory)"
-            else: 
+            else:
                 current_path_str = f"[red]Unknown Status '{status}'[/red]"
                 integrity_msg = "[red]Unknown[/red]"
 
@@ -517,20 +465,20 @@ class UndoManager:
             log.info("Quiet mode: Skipping undo confirmation. Undo will NOT proceed by default.")
             return False
         try:
-            confirm = self.console.input("Proceed with UNDO operation? ([bold green]y[/]/[bold red]N[/]): ").strip().lower()
-            if confirm == 'y':
+            # Use ConfirmClass from ui_utils for consistency
+            if ConfirmClass.ask("Proceed with UNDO operation?", default=False):
                 return True
-            self.console.print(TextClass("[yellow]Undo operation cancelled by user.[/yellow]", style="yellow")) 
+            self.console.print(TextClass("[yellow]Undo operation cancelled by user.[/yellow]", style="yellow"))
             return False
-        except (EOFError, KeyboardInterrupt) as e: 
+        except (EOFError, KeyboardInterrupt) as e:
             log.warning(f"Undo confirmation aborted by user ({type(e).__name__}).")
-            self.console.print(TextClass("\n[yellow]Undo operation cancelled by user.[/yellow]", style="yellow"), file=sys.stderr) 
+            # Use _print_stderr_message_undo helper for this module
+            _print_stderr_message_undo(self.console, TextClass("\n[yellow]Undo operation cancelled by user.[/yellow]", style="yellow"), self.quiet_mode, RICH_AVAILABLE)
             return False
-        except Exception as e:
+        except Exception as e: # Other prompt errors
             log.error(f"Error reading confirmation input for undo: {e}")
-            self.console.print(TextClass("[bold red]Undo operation cancelled (Error reading input).[/bold red]", style="bold red"), file=sys.stderr) 
+            _print_stderr_message_undo(self.console, TextClass("[bold red]Undo operation cancelled (Error reading input).[/bold red]", style="bold red"), self.quiet_mode, RICH_AVAILABLE)
             return False
-
 
     def _revert_single_file_undo_action(self, action_log: sqlite3.Row, batch_id: str, conn: sqlite3.Connection) -> Tuple[bool, bool, str]:
         orig_p = Path(action_log['original_path'])
@@ -540,7 +488,7 @@ class UndoManager:
         action_id = action_log['id']
         
         log_prefix = f"[Undo ID {action_id}] "
-        console_prefix = f"  {log_prefix}" 
+        console_prefix = f"  {log_prefix}"
         
         current_src: Optional[Path] = None
         if status in ('renamed', 'moved'):
@@ -555,7 +503,7 @@ class UndoManager:
                 msg = f"Skipped revert: Cannot find temp file for '{new_p.name}'"
                 log.warning(f"{log_prefix}{msg}")
                 return False, False, f"{console_prefix}[yellow]{msg}[/yellow]"
-            else: 
+            else:
                 msg = f"Internal error: Could not determine source for status '{status}' for '{new_p.name}'."
                 log.error(f"{log_prefix}{msg}")
                 return False, False, f"{console_prefix}[red]{msg}[/red]"
@@ -565,7 +513,7 @@ class UndoManager:
 
         if self.check_integrity and item_type == 'file' and status != 'pending_final':
             integrity_passed, integrity_msg_raw = self._check_file_integrity(current_src, action_log['original_size'], action_log['original_mtime'], action_log['original_hash'])
-            if not self.quiet_mode:
+            if not self.quiet_mode: # Only print integrity to console if not quiet
                 self.console.print(f"{console_prefix}Integrity check for '[cyan]{current_src.name}[/]': {integrity_msg_raw}")
             log.info(f"{log_prefix}Integrity check for '{current_src}': {integrity_msg_raw}")
             if not integrity_passed:
@@ -603,13 +551,13 @@ class UndoManager:
             msg = f"Error reverting '{current_src.name}': {e}"
             log.error(f"{log_prefix}{msg}")
             return False, False, f"{console_prefix}[bold red]{msg}[/bold red]"
-        except Exception as e: 
+        except Exception as e:
             msg = f"Unexpected error reverting '{current_src.name}': {e}"
             log.exception(f"{log_prefix}{msg}")
             return False, False, f"{console_prefix}[bold red]{msg}[/bold red]"
 
     def _revert_created_dir_undo_action(self, action_log: sqlite3.Row, batch_id: str, conn: sqlite3.Connection, removed_dirs_list: List[Path]) -> Tuple[bool, bool, str]:
-        dir_to_remove = Path(action_log['original_path']) 
+        dir_to_remove = Path(action_log['original_path'])
         action_id = action_log['id']
         
         log_prefix = f"[Undo ID {action_id}] "
@@ -640,7 +588,7 @@ class UndoManager:
         try:
             log.info(f"{log_prefix}Attempting rmdir: '{dir_to_remove}'")
             dir_to_remove.rmdir()
-            removed_dirs_list.append(dir_to_remove) 
+            removed_dirs_list.append(dir_to_remove)
             
             db_updated = self.update_action_status(batch_id, str(dir_to_remove), 'reverted', conn=conn)
             if not db_updated:
@@ -662,16 +610,16 @@ class UndoManager:
         
         self.console.print("--- Attempting to clean up empty parent directories ---")
         sorted_dirs = sorted(removed_dirs, key=lambda p: len(p.parts), reverse=True)
-        processed_parents = set() 
+        processed_parents = set()
 
         for d_path in sorted_dirs:
             parent = d_path.parent
-            while parent != parent.parent: 
+            while parent != parent.parent:
                 if parent in processed_parents or not parent.is_dir():
-                    break 
+                    break
                 
                 try:
-                    if not any(parent.iterdir()): 
+                    if not any(parent.iterdir()):
                         log.info(f"[Undo Cleanup] Attempting rmdir on empty parent: '{parent}'")
                         try:
                             parent.rmdir()
@@ -679,23 +627,23 @@ class UndoManager:
                         except OSError as e_p:
                             self.console.print(f"  [dim]Info: Could not remove parent '[cyan]{parent}[/]': {e_p}[/dim]")
                             log.warning(f"[Undo Cleanup] Failed parent rmdir '{parent}': {e_p}")
-                            break 
+                            break
                     else:
                         log.debug(f"[Undo Cleanup] Parent '{parent}' not empty.")
-                        break 
+                        break
                 except OSError as e_chk:
                     log.warning(f"[Undo Cleanup] Error checking or removing parent '{parent}': {e_chk}")
-                    break 
+                    break
                 
                 processed_parents.add(parent)
-                parent = parent.parent 
+                parent = parent.parent
 
     def perform_undo(self, batch_id: str, dry_run: bool = False):
         if not self.is_enabled:
-            self.console.print(TextClass("[bold red]Error: Undo disabled.[/bold red]", style="bold red"), file=sys.stderr) 
+            _print_stderr_message_undo(self.console, TextClass("[bold red]Error: Undo disabled.[/bold red]", style="bold red"), self.quiet_mode, RICH_AVAILABLE)
             return False
         if not self.db_path or not self.db_path.exists():
-            self.console.print(TextClass(f"[bold red]Error: Undo DB not found at {self.db_path}[/cyan]", style="bold red"), file=sys.stderr) 
+            _print_stderr_message_undo(self.console, TextClass(f"[bold red]Error: Undo DB not found at {self.db_path}[/cyan]", style="bold red"), self.quiet_mode, RICH_AVAILABLE)
             return False
 
         action_word = "DRY RUN UNDO" if dry_run else "UNDO"
@@ -706,11 +654,11 @@ class UndoManager:
         try:
             conn = self._connect()
             if not conn:
-                self.console.print(TextClass("[bold red]Error: Could not connect to undo database.[/bold red]", style="bold red"), file=sys.stderr) 
+                _print_stderr_message_undo(self.console, TextClass("[bold red]Error: Could not connect to undo database.[/bold red]", style="bold red"), self.quiet_mode, RICH_AVAILABLE)
                 return False
             actions_to_revert = self._fetch_undo_actions_from_db(batch_id, conn)
         except (sqlite3.Error, RenamerError) as e:
-            self.console.print(TextClass(f"[bold red]Error accessing undo database:[/bold red] {e}", style="bold red"), file=sys.stderr) 
+            _print_stderr_message_undo(self.console, TextClass(f"[bold red]Error accessing undo database:[/bold red] {e}", style="bold red"), self.quiet_mode, RICH_AVAILABLE)
             if conn: conn.close()
             return False
         
@@ -727,12 +675,12 @@ class UndoManager:
         
         if not self._confirm_undo_with_user():
             if conn: conn.close()
-            return False 
+            return False
 
         self.console.print("--- Performing Revert ---")
         s_count, db_err, fs_err, sk_count = 0, 0, 0, 0
         crit_fs_err_flag = False
-        removed_dirs: List[Path] = [] 
+        removed_dirs: List[Path] = []
 
         try:
             for item in actions_to_revert:
@@ -750,16 +698,16 @@ class UndoManager:
                     log.warning(f"[Undo ID {action_id_for_msg}] Skipping unknown status '{status}'")
                     sk_count += 1
                 
-                self.console.print(msg) 
+                self.console.print(msg)
                 
                 if fs_ok and db_ok: s_count += 1
-                elif fs_ok and not db_ok: db_err += 1 
+                elif fs_ok and not db_ok: db_err += 1
                 elif not fs_ok:
                     if "error" in msg.lower() or "fail" in msg.lower() or "[red]" in msg.lower():
                         fs_err += 1
                         crit_fs_err_flag = True
                     else:
-                        sk_count +=1 
+                        sk_count +=1
             
             if not crit_fs_err_flag and db_err == 0:
                 if conn: conn.commit()
@@ -769,15 +717,15 @@ class UndoManager:
             else:
                 if conn: conn.rollback()
                 log.error(f"Undo DB rollback for batch '{batch_id}'. CritFS: {crit_fs_err_flag}, DBFails: {db_err}")
-                self.console.print(TextClass("[bold red]WARNING: Problems occurred. DB changes rolled back.[/bold red]", style="bold red"), file=sys.stderr) 
-                if crit_fs_err_flag: self.console.print(TextClass("[bold red]Critical FS errors. Files may be inconsistent.[/bold red]", style="bold red"), file=sys.stderr) 
-                if db_err > 0: self.console.print(TextClass(f"[bold red]{db_err} DB updates failed for successful FS ops. Log may be inconsistent.[/bold red]", style="bold red"), file=sys.stderr) 
+                _print_stderr_message_undo(self.console, TextClass("[bold red]WARNING: Problems occurred. DB changes rolled back.[/bold red]", style="bold red"), self.quiet_mode, RICH_AVAILABLE)
+                if crit_fs_err_flag: _print_stderr_message_undo(self.console, TextClass("[bold red]Critical FS errors. Files may be inconsistent.[/bold red]", style="bold red"), self.quiet_mode, RICH_AVAILABLE)
+                if db_err > 0: _print_stderr_message_undo(self.console, TextClass(f"[bold red]{db_err} DB updates failed for successful FS ops. Log may be inconsistent.[/bold red]", style="bold red"), self.quiet_mode, RICH_AVAILABLE)
                 overall_ok = False
         except Exception as e_outer:
             log.exception(f"Critical error during undo transaction for '{batch_id}': {e_outer}")
-            self.console.print(TextClass(f"[bold red]CRITICAL UNEXPECTED ERROR during undo: {e_outer}[/bold red]", style="bold red"), file=sys.stderr) 
-            if conn: 
-                try: conn.rollback() 
+            _print_stderr_message_undo(self.console, TextClass(f"[bold red]CRITICAL UNEXPECTED ERROR during undo: {e_outer}[/bold red]", style="bold red"), self.quiet_mode, RICH_AVAILABLE)
+            if conn:
+                try: conn.rollback()
                 except Exception as e_rb_final: log.error(f"Error during final rollback attempt: {e_rb_final}")
             overall_ok = False
         finally:
@@ -794,5 +742,5 @@ class UndoManager:
         summary = ", ".join(summary_parts) if summary_parts else "No actions tallied."
         self.console.print(f"Summary: {summary}.")
         if not overall_ok:
-             self.console.print(TextClass("[bold red]Undo operation finished with errors. Please check logs.[/bold red]", style="bold red"), file=sys.stderr) 
+             _print_stderr_message_undo(self.console, TextClass("[bold red]Undo operation finished with errors. Please check logs.[/bold red]", style="bold red"), self.quiet_mode, RICH_AVAILABLE)
         return overall_ok
