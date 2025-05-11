@@ -162,3 +162,4 @@ cython_debug/
 renamer.log
 env.txt
 .env
+rename_log.db
