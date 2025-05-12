@@ -7,7 +7,7 @@ import builtins # For print to stderr in critical cache error
 import sys
 from functools import wraps, partial # partial not currently used
 from pathlib import Path
-from typing import Optional, Tuple, TYPE_CHECKING, Any, Iterable, Sequence, Dict, cast, List, Deque, Union
+from typing import Optional, Tuple, TYPE_CHECKING, Any, Iterable, Sequence, Dict, cast, List, Deque, Union, TypeAlias
 
 from collections import deque # <<< ENSURE THIS IS PRESENT
 
@@ -33,21 +33,26 @@ log = logging.getLogger(__name__)
 
 # --- Optional Dependency Imports & Flags ---
 try:
-    import diskcache as actual_diskcache_module # Give it a distinct name for runtime
+    import diskcache as actual_diskcache_module
     DISKCACHE_AVAILABLE = True
 except ImportError:
     DISKCACHE_AVAILABLE = False
-    actual_diskcache_module = None # Runtime alias for when it's not available
+    actual_diskcache_module = None
 
+# Type alias for diskcache.Cache
 if TYPE_CHECKING:
     try:
-        from diskcache import Cache as DiskCacheType # For type hinting self.cache
+        from diskcache import Cache as _ActualDiskCacheClass
+        DiskCacheType_Hint: TypeAlias = _ActualDiskCacheClass # Explicitly use TypeAlias
     except ImportError:
-        DiskCacheType = Any # Fallback for type checker if diskcache stubs aren't found
+        DiskCacheType_Hint: TypeAlias = Any
 else:
-    # Provide a runtime fallback for DiskCacheType if not in TYPE_CHECKING,
-    # though it's primarily for the type hint.
-    DiskCacheType = Any
+    # At runtime, this alias is primarily for completeness if directly inspected,
+    # but the type hint in the class will refer to the TYPE_CHECKING version.
+    DiskCacheType_Hint: TypeAlias = Any
+
+# Define DiskCacheType for runtime use
+DiskCacheType = DiskCacheType_Hint
 
 try:
     import platformdirs
