@@ -20,17 +20,7 @@ from .api_clients import get_tmdb_client, get_tvdb_client
 from .enums import ProcessingStatus
 from .undo_manager import UndoManager
 from .config_manager import ConfigHelper
-
-# --- UI Utils Import ---
-from rename_app.ui_utils import (
-    ConsoleClass, TextClass, PanelClass, TableClass,
-    ProgressClass, # <<< Ensure ProgressClass is imported
-    BarColumnClass, ProgressTextColumnClass, TimeElapsedColumnClass, MofNCompleteColumnClass,
-    TaskIDClass, # <<< Ensure TaskIDClass is imported
-    ConfirmClass, PromptClass, InvalidResponseClass, # Keep these for direct use in this module if needed
-    RICH_AVAILABLE_UI as RICH_AVAILABLE, RichConsoleActual
-)
-
+from .ui_utils import (ConsoleClass, TextClass, PanelClass, TableClass, ProgressClass, BarColumnClass, ProgressTextColumnClass, TimeElapsedColumnClass, MofNCompleteColumnClass, TaskIDClass, ConfirmClass, PromptClass, InvalidResponseClass, RICH_AVAILABLE_UI as RICH_AVAILABLE, RichConsoleActual)
 
 log = logging.getLogger(__name__)
 

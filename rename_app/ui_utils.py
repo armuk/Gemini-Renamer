@@ -2,7 +2,7 @@
 import sys
 import time
 import builtins # Ensure builtins is imported for fallback print
-from typing import Any, Optional, List, Dict # Added List for Prompt fallback type hint
+from typing import Any, Optional, List, Dict, TYPE_CHECKING, Union # Added List for Prompt fallback type hint
 
 # --- RICH IMPORT FOR UI COMPONENTS ---
 
@@ -288,20 +288,70 @@ FallbackTaskID = int # Simple integer for fallback TaskID type
 
 
 # --- Assign the correct class based on individual component availability ---
+if TYPE_CHECKING:
+   # This block is only seen by type checkers like Pylance
 
-ConsoleClass = RichConsoleActual if _RICH_CONSOLE_OK and RichConsoleActual else FallbackConsole
-ConfirmClass = RichConfirm if _RICH_PROMPT_OK and RichConfirm else FallbackConfirm
-PromptClass = RichPrompt if _RICH_PROMPT_OK and RichPrompt else FallbackPrompt
-InvalidResponseClass = RichInvalidResponse if _RICH_PROMPT_OK and RichInvalidResponse else FallbackInvalidResponse
-TableClass = RichTable if _RICH_TABLE_OK and RichTable else FallbackTable
-TextClass = RichText if _RICH_TEXT_OK and RichText else FallbackText
-PanelClass = RichPanel if _RICH_PANEL_OK and RichPanel else FallbackPanel
-ProgressClass = RichProgress if _RICH_PROGRESS_OK and RichProgress else FallbackProgress
+    # Ensure RichConsoleActual and FallbackConsole are defined as classes before this
+    _RichConsoleType = RichConsoleActual if RichConsoleActual else Any
+    _FallbackConsoleType = FallbackConsole if FallbackConsole else Any
+    ConsoleClass = Union[_RichConsoleType, _FallbackConsoleType] # <--- ADD/VERIFY THIS LINE
 
-BarColumnClass = RichBarColumn if _RICH_PROGRESS_OK and RichBarColumn else FallbackBarColumn
-ProgressTextColumnClass = RichProgressTextColumn if _RICH_PROGRESS_OK and RichProgressTextColumn else FallbackProgressTextColumn
-TimeElapsedColumnClass = RichTimeElapsedColumn if _RICH_PROGRESS_OK and RichTimeElapsedColumn else FallbackTimeElapsedColumn
-MofNCompleteColumnClass = RichMofNCompleteColumn if _RICH_PROGRESS_OK and RichMofNCompleteColumn else FallbackMofNCompleteColumn
-TaskIDClass = RichTaskID_actual if _RICH_TASKID_OK and RichTaskID_actual else FallbackTaskID
+    # ... (other ...Class assignments for ProgressClass, TaskIDClass, etc.) ...
+    _RichProgressType = RichProgress if RichProgress else Any
+    _FallbackProgressType = FallbackProgress if FallbackProgress else Any
+    ProgressClass = Union[_RichProgressType, _FallbackProgressType]
 
-print(f"DEBUG ui_utils: Final PromptClass is: {PromptClass}")
+    _RichTaskIDType = RichTaskID_actual if RichTaskID_actual else Any
+    _FallbackTaskIDType = FallbackTaskID
+    TaskIDClass = Union[_RichTaskIDType, _FallbackTaskIDType]
+
+    # ... (and for all other ...Class variables like TextClass, TableClass, etc.) ...
+    _RichConfirmType = RichConfirm if RichConfirm else Any
+    _FallbackConfirmType = FallbackConfirm if FallbackConfirm else Any
+    ConfirmClass = Union[_RichConfirmType, _FallbackConfirmType]
+
+    _RichPromptType = RichPrompt if RichPrompt else Any
+    _FallbackPromptType = FallbackPrompt if FallbackPrompt else Any
+    PromptClass = Union[_RichPromptType, _FallbackPromptType]
+
+    # For exception classes, you can use type() or the class name directly if they are actual classes
+    _RichInvalidResponseType = type(RichInvalidResponse) if RichInvalidResponse and isinstance(RichInvalidResponse, type) else Any # Check if it's a class type
+    _FallbackInvalidResponseType = type(FallbackInvalidResponse) if FallbackInvalidResponse and isinstance(FallbackInvalidResponse, type) else Any
+    InvalidResponseClass = Union[_RichInvalidResponseType, _FallbackInvalidResponseType]
+    # A simpler way if they are always defined as classes:
+    # InvalidResponseClass = Union[RichInvalidResponse, FallbackInvalidResponse]
+
+    _RichTableType = RichTable if RichTable else Any
+    _FallbackTableType = FallbackTable if FallbackTable else Any
+    TableClass = Union[_RichTableType, _FallbackTableType]
+
+    _RichTextType = RichText if RichText else Any
+    _FallbackTextType = FallbackText if FallbackText else Any
+    TextClass = Union[_RichTextType, _FallbackTextType]
+
+    _RichPanelType = RichPanel if RichPanel else Any
+    _FallbackPanelType = FallbackPanel if FallbackPanel else Any
+    PanelClass = Union[_RichPanelType, _FallbackPanelType]
+    
+else:
+    # In non-type-checking mode, we can directly assign the classes
+    # based on the availability checks above.
+    # This is more efficient and avoids unnecessary type hints.
+
+    # Assign classes based on availability
+    ConsoleClass = RichConsoleActual if _RICH_CONSOLE_OK and RichConsoleActual else FallbackConsole
+    ConfirmClass = RichConfirm if _RICH_PROMPT_OK and RichConfirm else FallbackConfirm
+    PromptClass = RichPrompt if _RICH_PROMPT_OK and RichPrompt else FallbackPrompt
+    InvalidResponseClass = RichInvalidResponse if _RICH_PROMPT_OK and RichInvalidResponse else FallbackInvalidResponse
+    TableClass = RichTable if _RICH_TABLE_OK and RichTable else FallbackTable
+    TextClass = RichText if _RICH_TEXT_OK and RichText else FallbackText
+    PanelClass = RichPanel if _RICH_PANEL_OK and RichPanel else FallbackPanel
+    ProgressClass = RichProgress if _RICH_PROGRESS_OK and RichProgress else FallbackProgress
+
+    BarColumnClass = RichBarColumn if _RICH_PROGRESS_OK and RichBarColumn else FallbackBarColumn
+    ProgressTextColumnClass = RichProgressTextColumn if _RICH_PROGRESS_OK and RichProgressTextColumn else FallbackProgressTextColumn
+    TimeElapsedColumnClass = RichTimeElapsedColumn if _RICH_PROGRESS_OK and RichTimeElapsedColumn else FallbackTimeElapsedColumn
+    MofNCompleteColumnClass = RichMofNCompleteColumn if _RICH_PROGRESS_OK and RichMofNCompleteColumn else FallbackMofNCompleteColumn
+    TaskIDClass = RichTaskID_actual if _RICH_TASKID_OK and RichTaskID_actual else FallbackTaskID
+
+# print(f"DEBUG ui_utils: Final PromptClass is: {PromptClass}")

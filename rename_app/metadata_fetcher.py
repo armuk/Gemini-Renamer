@@ -33,21 +33,21 @@ log = logging.getLogger(__name__)
 
 # --- Optional Dependency Imports & Flags ---
 try:
-    import diskcache
+    import diskcache as actual_diskcache_module # Give it a distinct name for runtime
     DISKCACHE_AVAILABLE = True
 except ImportError:
     DISKCACHE_AVAILABLE = False
-    diskcache = None # Runtime alias
+    actual_diskcache_module = None # Runtime alias for when it's not available
 
 if TYPE_CHECKING:
-    # This import is only for static type analysis, not at runtime if DISKCACHE_AVAILABLE is False
-    # However, if diskcache is a direct dependency in requirements.txt, this is less critical
-    # as it should always be available. The string literal is often preferred for optional deps.
     try:
-        from diskcache import Cache as DiskCacheTypeHint # Alias for clarity
+        from diskcache import Cache as DiskCacheType # For type hinting self.cache
     except ImportError:
-        DiskCacheTypeHint = Any # Fallback if even stubs aren't found
-
+        DiskCacheType = Any # Fallback for type checker if diskcache stubs aren't found
+else:
+    # Provide a runtime fallback for DiskCacheType if not in TYPE_CHECKING,
+    # though it's primarily for the type hint.
+    DiskCacheType = Any
 
 try:
     import platformdirs
@@ -323,46 +323,53 @@ class MetadataFetcher:
         self.tmdb_first_result_min_score = int(self.cfg('tmdb_first_result_min_score', 65))
         log.debug(f"Fetcher Config: Year Tolerance={self.year_tolerance}, TMDB Strategy='{self.tmdb_strategy}', TMDB Fuzzy Cutoff={self.tmdb_fuzzy_cutoff}, TMDB First Result Min Score={self.tmdb_first_result_min_score}")
 
-        self.cache: Optional['diskcache.Cache'] = None
-        self.cache_enabled = bool(self.cfg('cache_enabled', True))
+        # Use the DiskCacheType defined at the module level (within TYPE_CHECKING guard)
+        self.cache: Optional[DiskCacheType] = None  # <--- USE THE ALIAS DEFINED AT MODULE LEVEL
+        
+        self.cache_enabled = bool(self.cfg('cache_enabled', True)) # This is your line 328 (approx)
         self.cache_expire = int(self.cfg('cache_expire_seconds', 60 * 60 * 24 * 7))
         if self.cache_enabled:
-             if DISKCACHE_AVAILABLE and diskcache is not None:
-                 cache_dir_config = self.cfg('cache_directory', None)
-                 cache_dir_path: Optional[Path] = None
-                 if cache_dir_config: cache_dir_path = Path(str(cache_dir_config)).resolve()
-                 elif PLATFORMDIRS_AVAILABLE and platformdirs is not None:
-                     try: cache_dir_path = Path(platformdirs.user_cache_dir("rename_app", "rename_app_author"))
-                     except Exception as e_pdirs: log.warning(f"Platformdirs failed to get cache dir: {e_pdirs}. Falling back.")
-                 if not cache_dir_path:
+            if DISKCACHE_AVAILABLE and actual_diskcache_module is not None: # Use runtime imported module
+                # ... (cache_dir_path logic) ...
+                cache_dir_config = self.cfg('cache_directory', None)
+                cache_dir_path: Optional[Path] = None
+                if cache_dir_config: cache_dir_path = Path(str(cache_dir_config)).resolve()
+                elif PLATFORMDIRS_AVAILABLE and platformdirs is not None:
+                    try: cache_dir_path = Path(platformdirs.user_cache_dir("rename_app", "rename_app_author"))
+                    except Exception as e_pdirs: log.warning(f"Platformdirs failed to get cache dir: {e_pdirs}. Falling back.")
+                if not cache_dir_path:
                     cache_dir_path = Path(__file__).parent.parent / ".rename_cache"; log.warning(f"Could not determine platform cache directory. Using fallback: {cache_dir_path}")
+                 
+                if cache_dir_path:
+                    status_context: Any = None
+                    try:
+                        # ... (status context logic) ...
+                        if RICH_AVAILABLE and isinstance(self.console, RichConsoleActual) and hasattr(self.console, 'status'):
+                            status_context = self.console.status("[bold green]Initializing metadata cache...[/]", spinner="dots") # type: ignore
+                            if status_context: status_context.start() # type: ignore
+                        else:
+                            self.console.print("Initializing metadata cache...")
 
-                 if cache_dir_path:
-                     status_context: Any = None
-                     try:
-                         if RICH_AVAILABLE and isinstance(self.console, RichConsoleActual) and hasattr(self.console, 'status'):
-                             status_context = self.console.status("[bold green]Initializing metadata cache...[/]", spinner="dots") # type: ignore
-                             if status_context: status_context.start() # type: ignore
-                         else:
-                             self.console.print("Initializing metadata cache...")
+                        cache_dir_path.mkdir(parents=True, exist_ok=True)
+                        # Use the runtime imported module here
+                        self.cache = actual_diskcache_module.Cache(str(cache_dir_path)) # type: ignore
+                        log.info(f"Persistent cache initialized at: {cache_dir_path} (Expiration: {self.cache_expire}s)")
 
-                         cache_dir_path.mkdir(parents=True, exist_ok=True)
-                         self.cache = diskcache.Cache(str(cache_dir_path))
-                         log.info(f"Persistent cache initialized at: {cache_dir_path} (Expiration: {self.cache_expire}s)")
+                        # ... (status context stop logic) ...
+                        if status_context and hasattr(status_context, 'stop'):
+                            status_context.stop() # type: ignore
+                        self.console.print("[green]✓ Metadata cache initialized.[/green]")
 
-                         if status_context and hasattr(status_context, 'stop'):
-                             status_context.stop() # type: ignore
-                         self.console.print("[green]✓ Metadata cache initialized.[/green]")
-
-                     except Exception as e:
-                         if status_context and hasattr(status_context, 'stop'):
-                             status_context.stop() # type: ignore
-                         builtins.print(f"Error initializing disk cache at '{cache_dir_path}': {e}. Disabling cache.", file=sys.stderr)
-                         log.error(f"Failed to initialize disk cache at '{cache_dir_path}': {e}. Disabling cache."); self.cache = None; self.cache_enabled = False
-                 else:
-                     log.error("Could not determine a valid cache directory. Persistent caching disabled."); self.cache_enabled = False
-             else:
-                 log.warning("Persistent caching enabled, but 'diskcache' library not found. Caching disabled."); self.cache_enabled = False
+                    except Exception as e:
+                        # ... (error handling for cache init) ...
+                        if status_context and hasattr(status_context, 'stop'):
+                            status_context.stop() # type: ignore
+                        builtins.print(f"Error initializing disk cache at '{cache_dir_path}': {e}. Disabling cache.", file=sys.stderr)
+                        log.error(f"Failed to initialize disk cache at '{cache_dir_path}': {e}. Disabling cache."); self.cache = None; self.cache_enabled = False
+                else:
+                    log.error("Could not determine a valid cache directory. Persistent caching disabled."); self.cache_enabled = False
+            else:
+                log.warning("Persistent caching enabled, but 'diskcache' library not found. Caching disabled."); self.cache_enabled = False
         else:
             log.info("Persistent caching disabled by configuration.")
 
