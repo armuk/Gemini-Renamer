@@ -356,10 +356,12 @@ class RenamerEngine:
                 # Otherwise, if a directory creation IS planned, it means the file needs to move into that new dir,
                 # even if its name doesn't change, which should have generated a 'move' action.
                 # This means if created_dir_path is set, planned_actions_dict should not be empty if a move is needed.
-                if not plan.created_dir_path: # No actions AND no new directory planned
-                     log.info(f"No actions planned for '{video_path.name}', path likely already correct and in correct folder.")
-                     plan.status = 'skipped'; plan.message = f"[{ProcessingStatus.PATH_ALREADY_CORRECT}] Path already correct for '{video_path.name}'."
-                     return plan
+                if not plan.created_dir_path or (plan.created_dir_path and original_video_path_resolved.parent == plan.created_dir_path.resolve()):
+                    log.info(f"No actions planned for '{video_path.name}', path likely already correct.")
+                    plan.status = 'skipped' # CHANGED
+                    plan.message = f"[{ProcessingStatus.PATH_ALREADY_CORRECT.name}] Path already correct for '{video_path.name}'."
+                    # action_result['success'] will be handled by the caller based on this message/status
+                    return plan
                 elif plan.created_dir_path and original_video_path_resolved.parent == plan.created_dir_path.resolve():
                      # This means a dir was "planned" but the file is already in it, and names match.
                      log.info(f"No rename actions for '{video_path.name}', and it's already in the target directory structure. Path correct.")

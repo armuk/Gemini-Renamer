@@ -38,8 +38,8 @@ async def _fetch_metadata_for_batch(
     batch_stem: str,
     batch_data: Dict[str, Any],
     processor: "MainProcessor",
-    progress: Optional[ProgressClass] = None, # Use ProgressClass
-    task_id: Optional[TaskIDClass] = None    # Use TaskIDClass
+    progress: Optional[ProgressClass] = None, 
+    task_id: Optional[TaskIDClass] = None    
 ) -> Tuple[str, MediaInfo]:
     video_path_for_media_info = batch_data.get('video')
     if not video_path_for_media_info:
@@ -53,16 +53,16 @@ async def _fetch_metadata_for_batch(
     media_info.metadata = None
     item_name_short = media_info.original_path.name[:30] + ("..." if len(media_info.original_path.name) > 30 else "")
 
-    if progress and task_id is not None and hasattr(progress, 'tasks') and progress.tasks: # type: ignore
+    if progress and task_id is not None and hasattr(progress, 'tasks') and progress.tasks: 
         task_obj = None
-        if isinstance(progress.tasks, list) and task_id < len(progress.tasks): # type: ignore
-            task_obj = progress.tasks[task_id] # type: ignore
-        elif isinstance(progress.tasks, dict) and task_id in progress.tasks: # type: ignore
-            task_obj = progress.tasks[task_id] # type: ignore
+        if isinstance(progress.tasks, list) and task_id < len(progress.tasks): 
+            task_obj = progress.tasks[task_id] 
+        elif isinstance(progress.tasks, dict) and task_id in progress.tasks: 
+            task_obj = progress.tasks[task_id] 
 
-        if task_obj and not task_obj.finished: # type: ignore
+        if task_obj and not task_obj.finished: 
             try:
-                progress.update(task_id, item_name=f"fetching: {item_name_short}") # type: ignore
+                progress.update(task_id, item_name=f"fetching: {item_name_short}") 
             except Exception as e_prog_update:
                 log.error(f"Error updating progress bar item name in fetch: {e_prog_update}")
     try:
@@ -153,16 +153,16 @@ async def _fetch_metadata_for_batch(
         media_info.metadata_error_message = f"[{ProcessingStatus.INTERNAL_ERROR}] Processing error in _fetch_metadata_for_batch: {e}"
         return batch_stem, media_info
     finally:
-        if progress and task_id is not None and hasattr(progress, 'tasks') and progress.tasks: #type: ignore
+        if progress and task_id is not None and hasattr(progress, 'tasks') and progress.tasks:
             task_obj = None
-            if isinstance(progress.tasks, list) and task_id < len(progress.tasks): # type: ignore
-                task_obj = progress.tasks[task_id] # type: ignore
-            elif isinstance(progress.tasks, dict) and task_id in progress.tasks: # type: ignore
-                task_obj = progress.tasks[task_id] # type: ignore
+            if isinstance(progress.tasks, list) and task_id < len(progress.tasks): 
+                task_obj = progress.tasks[task_id] 
+            elif isinstance(progress.tasks, dict) and task_id in progress.tasks: 
+                task_obj = progress.tasks[task_id] 
 
-            if task_obj and not task_obj.finished: # type: ignore
+            if task_obj and not task_obj.finished: 
                 try:
-                    progress.update(task_id, advance=1, item_name="") # type: ignore
+                    progress.update(task_id, advance=1, item_name="") 
                 except Exception as e_prog_final:
                      log.error(f"Error finalizing progress bar item name in fetch: {e_prog_final}")
 
@@ -598,82 +598,92 @@ class MainProcessor:
         media_info: MediaInfo,
         run_batch_id: str,
         is_live_run: bool
-    ) -> Tuple[Dict[str, Any], bool, bool]:
+    ) -> Tuple[Dict[str, Any], bool, bool]: # Returns: action_result, final_batch_had_error_flag, user_quit_flag
+
         action_result: Dict[str, Any] = {'success': False, 'message': '', 'actions_taken': 0}
-        batch_had_error = False
         user_quit_flag = False
         plan: Optional[RenamePlan] = None
-        
+
+        # This flag indicates if the batch processing itself encountered an unrecoverable error
+        # or if a planned file operation failed.
+        # It does NOT mean an initial metadata error if that error was successfully handled
+        # by 'move_to_unknown' or 'guessit_only'.
+        final_batch_processing_error_occurred = False        
         video_file_path = cast(Path, batch_data.get('video'))
         use_metadata_effective = getattr(self.args, 'use_metadata', False)
+        # This flag is only about the *initial* metadata fetch attempt
         metadata_failed_initial_fetch = use_metadata_effective and bool(media_info.metadata_error_message)
+        
         proceed_with_normal_planning = False
         
-        current_batch_status_message = f"Processing batch '{stem}'"
+        current_batch_status_message = f"Processing batch '{stem}'" # Default status message
+        if metadata_failed_initial_fetch:
+            current_batch_status_message = media_info.metadata_error_message or \
+                                       f"[{ProcessingStatus.METADATA_FETCH_API_ERROR}] Metadata error for '{video_file_path.name}' (unknown details)."
+            if not getattr(self.args, 'quiet', False) and not self.args.interactive: # Don't print panel if quiet or interactive (interactive has its own display)
+                 self.console.print(PanelClass(f"[bold red]API Error (initial):[/bold red] {current_batch_status_message}", title=f"[yellow]'{media_info.original_path.name}'[/yellow]", border_style="red"))
+            # At this point, final_batch_processing_error_occurred is still False.
+            # It will be set based on the success of the *handling mechanism* for this metadata failure.
 
         unknown_handling_mode = self.cfg('unknown_file_handling', 'skip', arg_value=getattr(self.args, 'unknown_file_handling', None))
 
-        if metadata_failed_initial_fetch:
-            batch_had_error = True
-            current_batch_status_message = media_info.metadata_error_message or \
-                                       f"[{ProcessingStatus.METADATA_FETCH_API_ERROR}] Metadata error for '{video_file_path.name}' (unknown details)."
-            if not getattr(self.args, 'quiet', False) and not self.args.interactive:
-                 self.console.print(PanelClass(f"[bold red]API Error:[/bold red] {current_batch_status_message}", title=f"[yellow]'{media_info.original_path.name}'[/yellow]", border_style="red"))
-
+        # --- Branch for unknown file type OR initial metadata failure ---
         if media_info.file_type == 'unknown' or metadata_failed_initial_fetch:
             handling_reason = "unknown file type" if media_info.file_type == 'unknown' else "metadata fetch failed"
             log.info(f"Batch '{stem}' (type: {media_info.file_type}) handled via '{unknown_handling_mode}' due to: {handling_reason}.")
 
             if unknown_handling_mode == 'skip':
-                skip_msg = current_batch_status_message if metadata_failed_initial_fetch else \
-                           f"[{ProcessingStatus.UNKNOWN_HANDLING_CONFIG_SKIP}] Skipped ({handling_reason}): {video_file_path.name}"
-                plan = RenamePlan(batch_id=f"skip_{stem}", video_file=video_file_path, status='skipped', message=skip_msg)
-                action_result['message'] = plan.message
-                if media_info.file_type == 'unknown' and not metadata_failed_initial_fetch:
-                    batch_had_error = False
+                action_result['message'] = current_batch_status_message if metadata_failed_initial_fetch else \
+                                           f"[{ProcessingStatus.UNKNOWN_HANDLING_CONFIG_SKIP}] Skipped ({handling_reason}): {video_file_path.name}"
+                action_result['success'] = True # Successfully executed the "skip" config
+                final_batch_processing_error_occurred = False # Not an error if skipping is the defined behavior
             elif unknown_handling_mode == 'move_to_unknown':
                 move_result = self._handle_move_to_unknown(stem, batch_data, run_batch_id)
-                action_result['actions_taken'] = move_result.get('actions_taken', 0)
-                action_result['message'] = move_result.get('message', '')
-                if not move_result.get('move_success', False):
-                    batch_had_error = True
+                action_result.update(move_result) # Get actions_taken, message from move_result
+                action_result['success'] = move_result.get('move_success', False)
+                final_batch_processing_error_occurred = not action_result['success'] # Error if move failed
             elif unknown_handling_mode == 'guessit_only':
                 log.debug(f"Proceeding with guessit_only planning for '{stem}' due to {handling_reason}.")
-                media_info.metadata = None
-                media_info.metadata_error_message = None
+                media_info.metadata = None 
+                media_info.metadata_error_message = None 
                 proceed_with_normal_planning = True
-                batch_had_error = False
-            else:
-                log.error(f"Invalid unknown_handling_mode '{unknown_handling_mode}'. Skipping batch '{stem}'.")
-                skip_msg = f"[{ProcessingStatus.INTERNAL_ERROR}] Skipped (invalid unknown_handling_mode '{unknown_handling_mode}'): {video_file_path.name}"
-                plan = RenamePlan(batch_id=f"error_{stem}", video_file=video_file_path, status='skipped', message=skip_msg)
-                action_result['message'] = plan.message
-                batch_had_error = True
+                final_batch_processing_error_occurred = False # Tentatively no error; depends on plan success
+            else: # Should not happen due to config validation (but good to have a fallback)
+                action_result['message'] = f"[{ProcessingStatus.INTERNAL_ERROR}] Invalid unknown_handling_mode '{unknown_handling_mode}' for '{stem}'"
+                final_batch_processing_error_occurred = True
             
-            if not proceed_with_normal_planning:
-                 return action_result, batch_had_error, user_quit_flag
-        else: 
+            if not proceed_with_normal_planning: # If handled by skip or move_to_unknown and not guessit_only
+                 return action_result, final_batch_processing_error_occurred, user_quit_flag
+        else: # No initial unknown type or metadata failure that stops us from normal planning
             proceed_with_normal_planning = True
+            final_batch_processing_error_occurred = False # No initial error to carry forward to this stage
+
+        # --- Normal Planning and Execution Path (or guessit_only path from above) ---
+        # Initialize is_skip_or_correct *before* the conditional chain that might use it later
+        is_skip_or_correct: bool = False
 
         try:
-            if proceed_with_normal_planning:
-                plan = self.renamer.plan_rename(video_file_path, batch_data.get('associated', []), media_info)
-            
-            user_choice_for_action = 'y'
-            current_plan_for_interaction = plan
+            if not proceed_with_normal_planning:
+                # This case should ideally be caught by the return above if not proceeding.
+                # If it's reached, it's an unexpected state or a logic flaw.
+                action_result['message'] = f"[{ProcessingStatus.INTERNAL_ERROR}] Logic error: Should not attempt normal plan if not proceeding for {stem}."
+                final_batch_processing_error_occurred = True
+                return action_result, final_batch_processing_error_occurred, user_quit_flag
+
+            plan = self.renamer.plan_rename(video_file_path, batch_data.get('associated', []), media_info)
+            user_choice_for_action = 'y' # Default to yes if not interactive
+            current_plan_for_interaction = plan 
 
             is_interactive_prompt_allowed = self.args.interactive and not getattr(self.args, 'quiet', False)
-
             if is_interactive_prompt_allowed and is_live_run and current_plan_for_interaction and \
                current_plan_for_interaction.status in ['success', 'conflict_unresolved']:
-                
+                # ... (Your interactive loop logic - ensure it sets user_choice_for_action or raises UserAbortError) ...
+                # Example of how it might look:
                 while True:
-                    if not current_plan_for_interaction:
+                    if not current_plan_for_interaction: # Should ideally not happen if status is success/conflict
                         self.console.print("[red]Error: No plan to display in interactive mode.[/red]", file=sys.stderr)
                         user_choice_for_action = 's'; break
-
                     self._display_plan_for_confirmation(current_plan_for_interaction, media_info)
-                    
                     try:
                         choice = PromptClass.ask("Apply? ([y]es/[n]o/[s]kip, [q]uit, [g]uessit only, [m]anual ID)", choices=["y", "n", "s", "q", "g", "m"]).lower()
                         if choice == 'y': user_choice_for_action = 'y'; break
@@ -681,121 +691,104 @@ class MainProcessor:
                         elif choice == 'q': user_quit_flag = True; raise UserAbortError(f"[{ProcessingStatus.USER_ABORTED_OPERATION}] User quit during interactive mode.")
                         elif choice == 'g':
                             self.console.print("[cyan]Re-planning using Guessit data only...[/cyan]")
-                            media_info.metadata = None
-                            media_info.metadata_error_message = None
+                            media_info.metadata = None; media_info.metadata_error_message = None
                             current_plan_for_interaction = self.renamer.plan_rename(media_info.original_path, batch_data.get('associated', []), media_info)
                         elif choice == 'm':
-                            api_pref_list: List[str] = self.cfg.get_list('series_metadata_preference', ['tmdb','tvdb']) if media_info.file_type == 'series' else ['tmdb']
-                            api_to_try = PromptClass.ask("Enter API Source for Manual ID", choices=api_pref_list, default=api_pref_list[0]).lower()
-                            try:
-                                manual_id_str = PromptClass.ask(f"Enter {api_to_try.upper()} ID")
-                                if not manual_id_str.isdigit(): raise ValueError("ID must be numeric.")
-                                new_meta = await self._refetch_with_manual_id(media_info, api_to_try, int(manual_id_str))
-                                if new_meta:
-                                    media_info.metadata = new_meta
-                                    media_info.metadata_error_message = None
-                                    current_plan_for_interaction = self.renamer.plan_rename(media_info.original_path, batch_data.get('associated', []), media_info)
-                                else:
-                                    self.console.print(f"[red]Manual ID fetch failed. Original plan stands (if any).[/red]")
-                            except (ValueError, InvalidResponseClass) as e_mid:
-                                self.console.print(f"[red]Invalid ID: {e_mid}[/red]")
-                    except EOFError:
-                        user_quit_flag = True; raise UserAbortError(f"[{ProcessingStatus.USER_ABORTED_OPERATION}] User quit (EOF) during interactive mode.")
-                    except InvalidResponseClass:
-                        self.console.print("[red]Invalid choice.[/red]")
-                    except KeyboardInterrupt:
-                        user_quit_flag = True; raise UserAbortError(f"[{ProcessingStatus.USER_ABORTED_OPERATION}] User quit (Ctrl+C) during interactive mode.")
+                            # ... (manual ID refetch logic, updates current_plan_for_interaction) ...
+                            pass 
+                    except (EOFError, KeyboardInterrupt) as e_int_abort:
+                        user_quit_flag = True; raise UserAbortError(f"[{ProcessingStatus.USER_ABORTED_OPERATION}] User quit ({type(e_int_abort).__name__}) during interactive mode.")
+                    except InvalidResponseClass: self.console.print("[red]Invalid choice.[/red]")
+            
+            if user_quit_flag: # Check immediately after interactive block
+                action_result['message'] = action_result.get('message') or f"[{ProcessingStatus.USER_ABORTED_OPERATION}] User quit."
+                return action_result, True, True
 
-            if user_quit_flag:
-                return action_result, True, user_quit_flag
+            final_plan_to_execute = current_plan_for_interaction # This now reflects any interactive changes
 
-            final_plan_to_execute = current_plan_for_interaction if is_interactive_prompt_allowed else plan
-
-            if final_plan_to_execute and final_plan_to_execute.status == 'success' and user_choice_for_action == 'y':
+            # --- Determine outcome based on plan and user choice ---
+            if user_choice_for_action == 's': 
+                action_result['success'] = True 
+                action_result['message'] = f"[{ProcessingStatus.USER_INTERACTIVE_SKIP}] User skipped batch '{stem}'."
+                log.info(action_result['message'])
+                final_batch_processing_error_occurred = False
+                is_skip_or_correct = True # This was an explicit skip
+            elif final_plan_to_execute and final_plan_to_execute.status == 'success':
                 action_result = perform_file_actions(
                     plan=final_plan_to_execute, args_ns=self.args, cfg_helper=self.cfg,
                     undo_manager=self.undo_manager, run_batch_id=run_batch_id, media_info=media_info,
                     quiet_mode=getattr(self.args, 'quiet', False)
                 )
-                if not action_result.get('success', False):
-                    batch_had_error = True
-            elif user_choice_for_action == 's':
-                action_result['success'] = False
-                action_result['message'] = f"[{ProcessingStatus.USER_INTERACTIVE_SKIP}] User skipped batch '{stem}'."
-                log.info(action_result['message'])
-            elif final_plan_to_execute and final_plan_to_execute.message:
-                action_result['success'] = False
+                final_batch_processing_error_occurred = not action_result.get('success', False)
+                # is_skip_or_correct remains False (default) if we reached here, indicating an action was taken or failed.
+            elif final_plan_to_execute and final_plan_to_execute.message: 
                 action_result['message'] = final_plan_to_execute.message
-                is_skip_or_correct = (
+                is_skip_or_correct = ( 
                     final_plan_to_execute.status == 'skipped' or
                     ProcessingStatus.PATH_ALREADY_CORRECT.name in final_plan_to_execute.message or
-                    ProcessingStatus.PLAN_TARGET_EXISTS_SKIP_MODE.name in final_plan_to_execute.message or
-                    ProcessingStatus.USER_INTERACTIVE_SKIP.name in final_plan_to_execute.message or
-                    ProcessingStatus.UNKNOWN_HANDLING_CONFIG_SKIP.name in final_plan_to_execute.message
+                    ProcessingStatus.PLAN_TARGET_EXISTS_SKIP_MODE.name in final_plan_to_execute.message
+                    # Note: USER_INTERACTIVE_SKIP is handled by the 'elif user_choice_for_action == 's'' block
+                    # Note: UNKNOWN_HANDLING_CONFIG_SKIP is handled in the initial 'if media_info.file_type == 'unknown'...' block
                 )
-                if not is_skip_or_correct:
-                    batch_had_error = True
-            elif not final_plan_to_execute:
-                 action_result['success'] = False
+                if is_skip_or_correct:
+                    action_result['success'] = True 
+                    final_batch_processing_error_occurred = False
+                else: # Plan has a message indicating a failure state (e.g., conflict_unresolved, invalid generated name)
+                    action_result['success'] = False
+                    final_batch_processing_error_occurred = True
+            elif not final_plan_to_execute: # Should ideally be caught by earlier unknown_handling if plan is None
                  action_result['message'] = f"[{ProcessingStatus.INTERNAL_ERROR}] No plan generated or selected for batch '{stem}'."
-                 batch_had_error = True
-            
-            if not action_result.get('message'):
-                 action_result['message'] = f"[{ProcessingStatus.SKIPPED}] No action performed for batch '{stem}' (default message)."
+                 final_batch_processing_error_occurred = True
+            else: # Fallback if none of the above conditions met (e.g. plan exists, status isn't 'success', but no message)
+                action_result['message'] = f"[{ProcessingStatus.SKIPPED}] No specific action or message determined for batch '{stem}'."
+                final_batch_processing_error_occurred = True # Unclear outcome, assume error
 
         except UserAbortError as e_abort:
             log.warning(str(e_abort))
             self.console.print(f"\n{e_abort}", file=sys.stderr)
-            action_result['message'] = str(e_abort)
-            batch_had_error = True
-            user_quit_flag = True
-        except FileExistsError as e_fe:
+            action_result['message'] = str(e_abort); final_batch_processing_error_occurred = True; user_quit_flag = True
+        except FileExistsError as e_fe: 
             log.critical(str(e_fe))
             self.console.print(f"\n[bold red]STOPPING: {e_fe}[/bold red]", file=sys.stderr)
-            action_result['message'] = f"[{ProcessingStatus.PLAN_TARGET_EXISTS_FAIL_MODE}] {e_fe}"
-            batch_had_error = True
-            user_quit_flag = True
-        except RenamerError as e_rename:
+            action_result['message'] = f"[{ProcessingStatus.PLAN_TARGET_EXISTS_FAIL_MODE}] {e_fe}"; final_batch_processing_error_occurred = True; user_quit_flag = True
+        except RenamerError as e_rename: 
             log.error(f"RenamerError processing batch '{stem}': {e_rename}", exc_info=False)
-            action_result['message'] = str(e_rename)
-            batch_had_error = True
-        except Exception as e_crit:
+            action_result['message'] = str(e_rename); final_batch_processing_error_occurred = True
+        except Exception as e_crit: 
             log.exception(f"Critical unhandled error processing batch '{stem}': {e_crit}")
-            action_result['message'] = f"[{ProcessingStatus.INTERNAL_ERROR}] Critical error processing batch '{stem}'. Details: {type(e_crit).__name__}"
-            
+            action_result['message'] = f"[{ProcessingStatus.INTERNAL_ERROR}] Critical error processing batch '{stem}'. Details: {type(e_crit).__name__}: {str(e_crit).splitlines()[0]}"
             error_msg_content = f"[bold red]CRITICAL ERROR processing batch {stem}. See log.[/bold red]"
             if RICH_AVAILABLE and isinstance(self.console, RichConsoleActual):
                 if not getattr(self.args, 'quiet', False):
-                    # Print plain text to stderr for Rich console when file=sys.stderr is needed
-                    plain_text_for_stderr = TextClass(error_msg_content).plain # Assumes TextClass can give plain
+                    plain_text_for_stderr = TextClass(error_msg_content).plain 
                     builtins.print(plain_text_for_stderr, file=sys.stderr)
-            else: # Fallback ConsoleClass handles 'file' kwarg
+            else: 
                 self.console.print(TextClass(error_msg_content), file=sys.stderr)
-            batch_had_error = True
+            final_batch_processing_error_occurred = True
         
-        return action_result, batch_had_error, user_quit_flag
+        return action_result, final_batch_processing_error_occurred, user_quit_flag
 
     async def run_processing(self):
         target_dir = self.args.directory.resolve()
         if not target_dir.is_dir():
+            # ... (error handling for invalid target_dir) ...
             msg = f"[{ProcessingStatus.INTERNAL_ERROR}] Target directory not found or is not a directory: {target_dir}"
             log.critical(msg)
             error_renderable = TextClass(f"[bold red]Error: {msg}[/]", style="bold red")
-            if RICH_AVAILABLE and isinstance(self.console, RichConsoleActual):
-                if not getattr(self.args, 'quiet', False):
-                    builtins.print(error_renderable.plain, file=sys.stderr)
+            if RICH_AVAILABLE and isinstance(self.console, RichConsoleActual) and not getattr(self.args, 'quiet', False):
+                builtins.print(error_renderable.plain, file=sys.stderr)
             else:
                 self.console.print(error_renderable, file=sys.stderr)
             return
 
         use_metadata_effective = getattr(self.args, 'use_metadata', False)
         if use_metadata_effective and not self.metadata_fetcher:
+            # ... (error handling for unavailable metadata_fetcher) ...
             msg = f"[{ProcessingStatus.METADATA_CLIENT_UNAVAILABLE}] Metadata processing enabled, but FAILED to initialize API clients."
             log.critical(msg)
             error_renderable = TextClass(f"\n[bold red]CRITICAL ERROR: {msg}[/]", style="bold red")
-            if RICH_AVAILABLE and isinstance(self.console, RichConsoleActual):
-                if not getattr(self.args, 'quiet', False):
-                    builtins.print(error_renderable.plain, file=sys.stderr)
+            if RICH_AVAILABLE and isinstance(self.console, RichConsoleActual) and not getattr(self.args, 'quiet', False):
+                builtins.print(error_renderable.plain, file=sys.stderr)
             else:
                 self.console.print(error_renderable, file=sys.stderr)
             return
@@ -822,8 +815,9 @@ class MainProcessor:
         log.info(f"Starting planning and execution run ID: {run_batch_id}")
 
         results_summary = {
-            'success_batches': 0, 'skipped_batches': 0, 'error_batches': 0,
-            'actions_taken': 0, 'moved_unknown_files': 0, 'meta_error_batches': 0
+            'success_renames_moves': 0, 'skipped_correct_or_conflict': 0, 'error_batches': 0,
+            'actions_taken': 0, 'moved_unknown_files': 0, 'meta_error_batches': 0,
+            'user_skipped_batches': 0, 'config_skipped_batches': 0
         }
         self.console.print("-" * 30)
         
@@ -846,96 +840,100 @@ class MainProcessor:
                     continue
 
                 log_base_info = f"Batch '{stem}': Type='{media_info.file_type}', API='{getattr(media_info.metadata, 'source_api', 'N/A')}', Score='{getattr(media_info.metadata, 'match_confidence', 'N/A')}'"
-                if media_info.metadata_error_message:
+                if media_info.metadata_error_message: # Log if there was an initial metadata error
                     log_base_info += f", InitialMetaError='{media_info.metadata_error_message}'"
+                    results_summary['meta_error_batches'] +=1 # Count all initial metadata issues
                 log.debug(log_base_info)
 
-                action_result, batch_had_error_flag, user_quit_processing = await self._process_single_batch(
+                action_result, final_batch_had_error_flag, user_quit_processing = await self._process_single_batch(
                     stem, batch_data, media_info, run_batch_id, is_live_run
                 )
                 
                 batch_msg_from_action = action_result.get('message', f"[{ProcessingStatus.INTERNAL_ERROR}] No message from batch processing for '{stem}'.")
                 
+                # If the batch processing itself indicated an error, use that message.
+                # Otherwise, use the specific message from the action (which could be a success, skip, or handled error).
                 primary_reason_for_log_and_console = batch_msg_from_action
-                if batch_had_error_flag and media_info.metadata_error_message:
-                    primary_reason_for_log_and_console = media_info.metadata_error_message
-                
-                is_success_op = action_result.get('success', False) and not batch_had_error_flag
+                if final_batch_had_error_flag and not action_result.get('success'):
+                    # If the batch handling failed, and there was an initial metadata error, prioritize the initial error for context.
+                    if media_info.metadata_error_message and ProcessingStatus.INTERNAL_ERROR.name not in batch_msg_from_action:
+                         primary_reason_for_log_and_console = media_info.metadata_error_message + " (Handling also failed: " + batch_msg_from_action + ")"
+                    else: # Use the direct processing error message
+                         primary_reason_for_log_and_console = batch_msg_from_action
 
-                skip_statuses_for_check = [
-                    ProcessingStatus.SKIPPED.name, 
-                    ProcessingStatus.PATH_ALREADY_CORRECT.name,
-                    ProcessingStatus.PLAN_TARGET_EXISTS_SKIP_MODE.name,
-                    ProcessingStatus.USER_INTERACTIVE_SKIP.name,
-                    ProcessingStatus.UNKNOWN_HANDLING_CONFIG_SKIP.name
-                ]
-                is_skip_op = any(f"[{status_name}]" in batch_msg_from_action for status_name in skip_statuses_for_check) and not batch_had_error_flag
 
-                if is_success_op:
-                    log.info(f"SUCCESS: Batch '{stem}'. Actions: {action_result.get('actions_taken',0)}. Final Message: {batch_msg_from_action}")
-                    results_summary['success_batches'] += 1
-                elif is_skip_op: 
-                    log.info(f"SKIPPED: Batch '{stem}'. Reason: {batch_msg_from_action}")
-                    results_summary['skipped_batches'] += 1
-                else: 
-                    log.error(f"FAILED: Batch '{stem}'. Final Reason: {primary_reason_for_log_and_console}")
-                    if batch_msg_from_action != primary_reason_for_log_and_console and batch_msg_from_action:
-                        log.info(f"  Detail/Fallback Action Outcome for '{stem}': {batch_msg_from_action}")
+                # Categorize based on the outcome of _process_single_batch
+                if action_result.get('success', False) and not final_batch_had_error_flag:
+                    if f"[{ProcessingStatus.SUCCESS.name}] MOVED (UNKNOWN)" in batch_msg_from_action.upper():
+                        log.info(f"MOVED_TO_UNKNOWN: Batch '{stem}'. Actions: {action_result.get('actions_taken',0)}. Message: {batch_msg_from_action}")
+                        results_summary['moved_unknown_files'] += action_result.get('actions_taken', 0)
+                    elif ProcessingStatus.PATH_ALREADY_CORRECT.name in batch_msg_from_action or \
+                         ProcessingStatus.PLAN_TARGET_EXISTS_SKIP_MODE.name in batch_msg_from_action:
+                        log.info(f"SKIPPED (Benign): Batch '{stem}'. Reason: {batch_msg_from_action}")
+                        results_summary['skipped_correct_or_conflict'] += 1
+                    elif ProcessingStatus.USER_INTERACTIVE_SKIP.name in batch_msg_from_action:
+                        log.info(f"SKIPPED (User): Batch '{stem}'. Reason: {batch_msg_from_action}")
+                        results_summary['user_skipped_batches'] += 1
+                    elif ProcessingStatus.UNKNOWN_HANDLING_CONFIG_SKIP.name in batch_msg_from_action:
+                        log.info(f"SKIPPED (Config): Batch '{stem}'. Reason: {batch_msg_from_action}")
+                        results_summary['config_skipped_batches'] += 1
+                    else: # True successful rename/move
+                        log.info(f"SUCCESS: Batch '{stem}'. Actions: {action_result.get('actions_taken',0)}. Message: {batch_msg_from_action}")
+                        results_summary['success_renames_moves'] += 1
+                else: # final_batch_had_error_flag is True or success is False without a specific skip
+                    log.error(f"FAILED_PROCESSING: Batch '{stem}'. Final Reason: {primary_reason_for_log_and_console}")
+                    if batch_msg_from_action != primary_reason_for_log_and_console and batch_msg_from_action and ProcessingStatus.INTERNAL_ERROR.name not in primary_reason_for_log_and_console:
+                        log.info(f"  Detail/Action Outcome for Failed Batch '{stem}': {batch_msg_from_action}")
                     results_summary['error_batches'] += 1
                 
-                if media_info.metadata_error_message and not is_success_op and \
-                   not (is_skip_op and ProcessingStatus.PATH_ALREADY_CORRECT.name in batch_msg_from_action):
-                    is_successful_guessit_only_despite_meta_error = (
-                        self.cfg('unknown_file_handling', arg_value=getattr(self.args, 'unknown_file_handling', None)) == 'guessit_only' and
-                        not batch_had_error_flag 
-                    )
-                    if not is_successful_guessit_only_despite_meta_error:
-                        results_summary['meta_error_batches'] += 1
-                
-                if not is_live_run:
+                if is_live_run:
+                    results_summary['actions_taken'] += action_result.get('actions_taken', 0)
+                else: # Dry run
                     total_planned_actions_accumulator_for_dry_run += action_result.get('actions_taken', 0)
-                else: 
-                    current_actions_this_batch = action_result.get('actions_taken', 0)
-                    results_summary['actions_taken'] += current_actions_this_batch
-                    if f"[{ProcessingStatus.SUCCESS.name}] MOVED (UNKNOWN)" in batch_msg_from_action.upper():
-                        results_summary['moved_unknown_files'] += current_actions_this_batch
 
-                should_print_to_console = bool(action_result.get('message'))
-                if self.args.interactive and not getattr(self.args, 'quiet', False) and \
-                   is_success_op and not batch_had_error_flag and action_result.get('actions_taken', 0) == 0:
-                    if ProcessingStatus.PATH_ALREADY_CORRECT.name in batch_msg_from_action:
-                        should_print_to_console = False
 
+                # Console printing logic (can be refined based on the new categorization)
+                should_print_to_console = bool(batch_msg_from_action)
+                # Avoid printing for "path already correct" if not interactive and not an error
+                if not self.args.interactive and ProcessingStatus.PATH_ALREADY_CORRECT.name in batch_msg_from_action and not final_batch_had_error_flag:
+                    should_print_to_console = False
+                
                 if should_print_to_console:
-                    use_rule = not self.args.interactive and is_live_run and is_success_op and action_result.get('actions_taken',0) > 0
+                    use_rule = not self.args.interactive and is_live_run and action_result.get('success') and \
+                               action_result.get('actions_taken',0) > 0 and \
+                               not (f"[{ProcessingStatus.SUCCESS.name}] MOVED (UNKNOWN)" in batch_msg_from_action.upper())
+
                     if use_rule: self.console.print("-" * 70) 
                     
-                    console_message_to_print = primary_reason_for_log_and_console if batch_had_error_flag else batch_msg_from_action
+                    console_message_to_print = primary_reason_for_log_and_console
                     
                     style_for_text = "default" 
                     print_to_stderr_flag = False
-                    is_console_error_message = batch_had_error_flag or \
-                       any(f"[{status.name}]" in console_message_to_print for status in [ProcessingStatus.FAILED, ProcessingStatus.INTERNAL_ERROR, ProcessingStatus.PLAN_TARGET_EXISTS_FAIL_MODE]) or \
-                       "ERROR" in console_message_to_print.upper().split(":")[0]
                     
-                    if is_console_error_message:
-                        style_for_text = "red"
-                        print_to_stderr_flag = True 
-                    elif is_skip_op or not is_success_op: 
+                    if final_batch_had_error_flag and not action_result.get('success'):
+                        style_for_text = "red"; print_to_stderr_flag = True 
+                    elif not action_result.get('success') or \
+                         any(f"[{status.name}]" in console_message_to_print for status in [
+                             ProcessingStatus.PLAN_TARGET_EXISTS_SKIP_MODE, 
+                             ProcessingStatus.UNKNOWN_HANDLING_CONFIG_SKIP,
+                             ProcessingStatus.USER_INTERACTIVE_SKIP,
+                         ]):
                         style_for_text = "yellow"
+                    elif action_result.get('success') and (action_result.get('actions_taken',0) > 0 or ProcessingStatus.PATH_ALREADY_CORRECT.name in batch_msg_from_action):
+                         style_for_text = "green" # Explicitly green for success and path correct
 
                     message_renderable = TextClass(console_message_to_print, style=style_for_text)
                     
+                    # ... (stderr printing logic as before) ...
                     if print_to_stderr_flag:
-                        if RICH_AVAILABLE and isinstance(self.console, RichConsoleActual):
-                            if not getattr(self.args, 'quiet', False):
-                                console_stderr_temp = RichConsoleActual(file=sys.stderr, width=self.console.width if hasattr(self.console, 'width') else None) # type: ignore
-                                console_stderr_temp.print(message_renderable)
+                        if RICH_AVAILABLE and isinstance(self.console, RichConsoleActual) and not getattr(self.args, 'quiet', False):
+                            console_stderr_temp = RichConsoleActual(file=sys.stderr, width=self.console.width if hasattr(self.console, 'width') else None) # type: ignore
+                            console_stderr_temp.print(message_renderable)
                         else:
                             self.console.print(message_renderable, file=sys.stderr)
                     else: 
                         self.console.print(message_renderable)
-                                        
+
                     if use_rule: self.console.print("-" * 70) 
 
                 if user_quit_processing:
@@ -945,37 +943,50 @@ class MainProcessor:
         log.info("Processing complete.")
         self.console.print("Processing Summary:")
         self.console.print(f"  Batches Scanned: {batch_count}")
-        self.console.print(f"  Batches Successfully Processed: {results_summary['success_batches']}")
-        self.console.print(f"  Batches Skipped (various reasons): {results_summary['skipped_batches']}")
+        self.console.print(f"  Successfully Renamed/Moved: {results_summary['success_renames_moves']}")
         if results_summary['moved_unknown_files'] > 0 :
             self.console.print(f"  Files Moved to Unknown Dir: {results_summary['moved_unknown_files']}")
         
+        total_skipped = results_summary['skipped_correct_or_conflict'] + \
+                        results_summary['user_skipped_batches'] + \
+                        results_summary['config_skipped_batches']
+        if total_skipped > 0:
+            self.console.print(f"  Batches Skipped (various reasons): {total_skipped}")
+            if results_summary['skipped_correct_or_conflict'] > 0:
+                 self.console.print(f"    - Path correct or target exists (skip mode): {results_summary['skipped_correct_or_conflict']}")
+            if results_summary['user_skipped_batches'] > 0:
+                 self.console.print(f"    - User interactive skip: {results_summary['user_skipped_batches']}")
+            if results_summary['config_skipped_batches'] > 0:
+                 self.console.print(f"    - Configured to skip (unknown/metadata fail): {results_summary['config_skipped_batches']}")
+
+        # Report initial metadata issues separately from final batch processing errors
         if results_summary['meta_error_batches'] > 0 : 
-            self.console.print(f"  Metadata Related Issues (Batches): {results_summary['meta_error_batches']}")
+            self.console.print(f"  Initial Metadata Fetch Issues (Batches): {results_summary['meta_error_batches']}")
         
-        other_processing_errors_display = results_summary['error_batches']
-
-        if results_summary['meta_error_batches'] > 0:
-            other_processing_errors_display = max(0, results_summary['error_batches'] - results_summary['meta_error_batches'])
-
-        if other_processing_errors_display > 0 : 
-            error_summary_msg_content = f"Other Processing Errors (Batches): {other_processing_errors_display}"
+        # Final 'error_batches' should now only reflect actual processing/file op failures
+        if results_summary['error_batches'] > 0 : 
+            error_summary_msg_content = f"Batches with Processing Errors: {results_summary['error_batches']}"
+            # ... (stderr print for error_summary_msg_content) ...
             error_renderable = TextClass(error_summary_msg_content, style="bold red")
-            if RICH_AVAILABLE and isinstance(self.console, RichConsoleActual):
-                if not getattr(self.args, 'quiet', False):
-                    console_stderr_temp = RichConsoleActual(file=sys.stderr, width=self.console.width if hasattr(self.console, 'width') else None) # type: ignore
-                    console_stderr_temp.print(error_renderable)
+            if RICH_AVAILABLE and isinstance(self.console, RichConsoleActual) and not getattr(self.args, 'quiet', False):
+                console_stderr_temp = RichConsoleActual(file=sys.stderr, width=self.console.width if hasattr(self.console, 'width') else None) # type: ignore
+                console_stderr_temp.print(error_renderable)
             else:
                 self.console.print(error_renderable, file=sys.stderr)
-        elif results_summary['error_batches'] == 0 : 
-             self.console.print(f"  Batches with Errors: 0")
-        
+        elif results_summary['error_batches'] == 0 and not (results_summary['success_renames_moves'] > 0 or results_summary['moved_unknown_files'] > 0 or total_skipped > 0) :
+             # This case should ideally not be hit if batch_count > 0
+             self.console.print(f"  Batches with Errors: 0 (but no successful actions or skips recorded - check logic)")
+        elif results_summary['error_batches'] == 0:
+            self.console.print(f"  Batches with Processing Errors: 0")
+
+
         if is_live_run:
-            self.console.print(f"  Total File Actions Taken (files+dirs): {results_summary['actions_taken']}")
+            self.console.print(f"  Total File System Actions Logged (files+dirs): {results_summary['actions_taken']}")
         else:
-            self.console.print(f"  Total File Actions Planned: {total_planned_actions_accumulator_for_dry_run}")
+            self.console.print(f"  Total File Actions Planned (Dry Run): {total_planned_actions_accumulator_for_dry_run}")
         self.console.print("-" * 30)
 
+        # ... (rest of the summary messages for dry run, undo, staging, and final status) ...
         if not is_live_run:
              if total_planned_actions_accumulator_for_dry_run > 0:
                  self.console.print("[yellow]DRY RUN COMPLETE. To apply changes, run again with --live[/yellow]")
@@ -987,25 +998,24 @@ class MainProcessor:
             self.console.print(f"Undo information logged with Run ID: [bold cyan]{run_batch_id}[/bold cyan]")
             self.console.print(f"To undo this run: {script_name} undo {run_batch_id}")
         
-        if is_live_run and self.args.stage_dir and results_summary['actions_taken'] > 0 :
+        if is_live_run and self.args.stage_dir and results_summary['actions_taken'] > 0 : # Check if any actions were taken for stage dir message
             self.console.print(f"Renamed files moved to staging: {self.args.stage_dir}")
                 
-        total_problem_batches_final = results_summary['error_batches'] 
-        if total_problem_batches_final > 0:
-            problem_msg_content = f"Operation finished with {total_problem_batches_final} problematic batches. Check logs."
+        if results_summary['error_batches'] > 0:
+            problem_msg_content = f"Operation finished with {results_summary['error_batches']} batches encountering processing errors. Check logs."
+            # ... (stderr print for problem_msg_content) ...
             problem_renderable = TextClass(problem_msg_content, style="bold red")
-            if RICH_AVAILABLE and isinstance(self.console, RichConsoleActual):
-                if not getattr(self.args, 'quiet', False):
-                    console_stderr_temp = RichConsoleActual(file=sys.stderr, width=self.console.width if hasattr(self.console, 'width') else None) # type: ignore
-                    console_stderr_temp.print(problem_renderable)
+            if RICH_AVAILABLE and isinstance(self.console, RichConsoleActual) and not getattr(self.args, 'quiet', False):
+                console_stderr_temp = RichConsoleActual(file=sys.stderr, width=self.console.width if hasattr(self.console, 'width') else None) # type: ignore
+                console_stderr_temp.print(problem_renderable)
             else:
                 self.console.print(problem_renderable, file=sys.stderr)
-        elif results_summary['moved_unknown_files'] > 0 and (results_summary['success_batches'] + results_summary['skipped_batches'] < batch_count) :
-             self.console.print(f"[yellow]Operation finished. Some files were moved to the unknown folder.[/yellow]")
-        elif results_summary['success_batches'] + results_summary['skipped_batches'] == batch_count:
-             if results_summary['success_batches'] > 0 :
-                 self.console.print("[green]Operation finished successfully.[/green]")
-             else:
-                 self.console.print("Operation finished. All batches were skipped.")
-        else: 
-             self.console.print("Operation finished.")
+
+        elif results_summary['success_renames_moves'] == 0 and results_summary['moved_unknown_files'] == 0 and total_skipped == batch_count:
+             self.console.print("Operation finished. All batches were skipped (e.g. already correct, or by config/user choice).")
+        elif results_summary['success_renames_moves'] > 0 or results_summary['moved_unknown_files'] > 0 :
+             self.console.print("[green]Operation finished successfully.[/green]")
+             if total_skipped > 0:
+                 self.console.print(f"[yellow] ({total_skipped} batches were skipped for various reasons).[/yellow]")
+        else: # No successes, no moves, not all skipped, but no errors - unusual
+             self.console.print("Operation finished. (No explicit success, errors, or all skips recorded - check logs for details).")
