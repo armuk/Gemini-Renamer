@@ -64,6 +64,8 @@ class BaseProfileSettings(BaseModel):
     unknown_file_handling: Optional[str] = Field(default='skip', description="How to handle unknown files: 'skip', 'guessit_only', 'move_to_unknown'.")
     unknown_files_dir: Optional[str] = Field(default='_unknown_files_', description="Directory for 'move_to_unknown' files (relative to target or absolute).")
     scan_strategy: Optional[str] = Field(default='memory', description="Scanning strategy: 'memory', 'low_memory'.")
+    temp_file_suffix_prefix: Optional[str] = Field(default=".renametmp_", description="Prefix for temporary filenames during transactional renames (e.g., '.tmp_', '_temp_'). Should include leading/trailing separators as desired.")
+
 
     # Scene Tags
     scene_tags_in_filename: Optional[bool] = Field(default=True, description="Include scene tags in the final filename.")
@@ -179,6 +181,21 @@ class BaseProfileSettings(BaseModel):
     def check_undo_integrity_hash_full(cls, v: Any) -> Optional[bool]:
         if v is not None and not isinstance(v, bool): raise ValueError("undo_integrity_hash_full must be a boolean")
         return v
+    
+    @field_validator('temp_file_suffix_prefix', mode='before')
+    @classmethod
+    def check_temp_file_suffix_prefix(cls, v: Any) -> Optional[str]:
+        if v is not None:
+            if not isinstance(v, str):
+                raise ValueError("temp_file_suffix_prefix must be a string.")
+            if not v: # cannot be empty
+                raise ValueError("temp_file_suffix_prefix cannot be empty.")
+            # Basic check for problematic characters if you want, but usually not strictly needed for internal suffixes
+            # For example, ensure it doesn't contain characters that would break path construction.
+            # if any(char in v for char in ['/', '\\', ':', '*', '?', '"', '<', '>']):
+            #     raise ValueError("temp_file_suffix_prefix contains invalid path characters.")
+        return v
+
 
 class DefaultSettings(BaseProfileSettings):
     pass
@@ -196,7 +213,7 @@ def generate_default_toml_content() -> str:
     sections: Dict[str, List[str]] = {
         "Core Settings": ['recursive', 'processing_mode', 'use_metadata', 'extract_stream_info', 'preserve_mtime', 'ignore_dirs', 'ignore_patterns'],
         "Format Strings": ['series_format', 'movie_format', 'subtitle_format', 'series_format_specials', 'folder_format_series', 'folder_format_movie', 'folder_format_specials'],
-        "File Handling & Extensions": ['video_extensions', 'associated_extensions', 'subtitle_extensions', 'on_conflict', 'create_folders', 'unknown_file_handling', 'unknown_files_dir', 'scan_strategy'],
+        "File Handling & Extensions": ['video_extensions', 'associated_extensions', 'subtitle_extensions', 'on_conflict', 'create_folders', 'unknown_file_handling', 'unknown_files_dir', 'scan_strategy', 'temp_file_suffix_prefix'],
         "Scene Tags": ['scene_tags_in_filename', 'scene_tags_to_preserve'],
         "Subtitles": ['subtitle_encoding_detection'],
         "API & Metadata Options": ['api_rate_limit_delay', 'api_retry_attempts', 'api_retry_wait_seconds', 'api_year_tolerance', 'tmdb_match_strategy', 'tmdb_match_fuzzy_cutoff', 'tmdb_first_result_min_score', 'confirm_match_below', 'series_metadata_preference'],
@@ -218,7 +235,9 @@ def generate_default_toml_content() -> str:
                 
                 toml_value_str: str
                 if isinstance(default_value, str):
-                    toml_value_str = f'"{default_value}"'
+                    # Escape backslashes and double quotes in string values for TOML
+                    escaped_default_value = default_value.replace('\\', '\\\\').replace('"', '\\"')
+                    toml_value_str = f'"{escaped_default_value}"'
                 elif isinstance(default_value, bool):
                     toml_value_str = str(default_value).lower()
                 elif isinstance(default_value, list):
@@ -448,6 +467,14 @@ class ConfigManager:
                     log.warning(f"Invalid config value for '{key}' in profile 'default'. Using default from model.")
                 else:
                     return val_from_default_section
+        
+        # Fallback to Pydantic model's default if not found above
+        if default_value is None and hasattr(BaseProfileSettings, 'model_fields') and key in BaseProfileSettings.model_fields:
+            field_info = BaseProfileSettings.model_fields[key]
+            if field_info.default_factory is not None:
+                return field_info.default_factory()
+            return field_info.default # This could be None itself, which is fine.
+            
         return default_value
 
     def get_api_key(self, service_name: str) -> Optional[str]:
@@ -460,7 +487,7 @@ class ConfigManager:
         default_section_settings = self._config.get('default', {})
         if isinstance(default_section_settings, dict):
             for k, v in default_section_settings.items():
-                if v is not None or k not in base_defaults:
+                if v is not None or k not in base_defaults: # Merge if value is set, or if it's a custom key
                     base_defaults[k] = v
 
         final_settings = base_defaults.copy()
@@ -469,7 +496,7 @@ class ConfigManager:
             profile_specific_data = self._config.get(profile, {})
             if isinstance(profile_specific_data, dict):
                  for k, v in profile_specific_data.items():
-                     if v is not None:
+                     if v is not None: # Only override if value is explicitly set in profile
                          final_settings[k] = v
             else:
                  log.warning(f"Profile '{profile}' in config is not a dictionary. Skipping merge for this profile.")
@@ -503,6 +530,15 @@ class ConfigHelper:
             return val
         elif isinstance(val, str):
             return [item.strip() for item in val.split(',') if item.strip()]
+
+        # If no value from config or CLI, use Pydantic model's default for lists if available
+        if default_value is None and hasattr(BaseProfileSettings, 'model_fields') and key in BaseProfileSettings.model_fields:
+            field_info = BaseProfileSettings.model_fields[key]
+            if field_info.default_factory is not None:
+                model_default_list = field_info.default_factory()
+                if isinstance(model_default_list, list): return model_default_list
+            elif isinstance(field_info.default, list):
+                return field_info.default
 
         return default_value if isinstance(default_value, list) else []
 

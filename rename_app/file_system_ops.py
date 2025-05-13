@@ -26,7 +26,7 @@ try: import send2trash; SEND2TRASH_AVAILABLE = True
 except ImportError: SEND2TRASH_AVAILABLE = False
 
 log = logging.getLogger(__name__)
-TEMP_SUFFIX_PREFIX = ".renametmp_"
+# TEMP_SUFFIX_PREFIX = ".renametmp_" # Removed hardcoded constant
 WINDOWS_PATH_LENGTH_WARNING_THRESHOLD = 240
 
 def _compare_and_format(
@@ -523,7 +523,8 @@ def _perform_transactional_rename_move(
     resolved_target_map: Dict[Path, Path],
     original_mtimes: Dict[Path, float],
     should_preserve_mtime: bool,
-    conflict_mode_for_phase2: str,
+    conflict_mode_for_phase2: str, # This parameter is passed from perform_file_actions
+    temp_suffix_prefix: str, # New parameter
     action_messages: List[str]
 ) -> Tuple[int, bool]:
     original_to_temp_map: Dict[Path, Path] = {}
@@ -531,7 +532,7 @@ def _perform_transactional_rename_move(
     phase1_ok = True
     actions_taken_count = 0
 
-    log.debug(f"Starting Phase 1: Move to temporary paths for run {run_batch_id}")
+    log.debug(f"Starting Phase 1: Move to temporary paths for run {run_batch_id} (using prefix: '{temp_suffix_prefix}')")
     for action in plan.actions:
         orig_p_resolved = action.original_path.resolve()
         final_p_intended = resolved_target_map.get(orig_p_resolved)
@@ -545,11 +546,13 @@ def _perform_transactional_rename_move(
 
         try:
             temp_file_uuid = uuid.uuid4().hex[:8]
-            temp_path = final_p_intended.parent / f"{final_p_intended.stem}{TEMP_SUFFIX_PREFIX}{temp_file_uuid}{final_p_intended.suffix}"
+            # Use the new temp_suffix_prefix parameter here
+            temp_path = final_p_intended.parent / f"{final_p_intended.stem}{temp_suffix_prefix}{temp_file_uuid}{final_p_intended.suffix}"
             
             while temp_path.exists() or temp_path.is_symlink():
                 temp_file_uuid = uuid.uuid4().hex[:8]
-                temp_path = final_p_intended.parent / f"{final_p_intended.stem}{TEMP_SUFFIX_PREFIX}{temp_file_uuid}{final_p_intended.suffix}"
+                # And here
+                temp_path = final_p_intended.parent / f"{final_p_intended.stem}{temp_suffix_prefix}{temp_file_uuid}{final_p_intended.suffix}"
 
             if undo_manager.is_enabled:
                 undo_manager.log_action(
@@ -757,6 +760,9 @@ def perform_file_actions(
     elif hasattr(args_ns, 'trash') and args_ns.trash:
         primary_action_type = 'trash'
 
+    # Fetch the temp file suffix prefix from config
+    temp_suffix_prefix_val = cfg_helper('temp_file_suffix_prefix', ".renametmp_") # Default if not in config for some reason
+
     created_dir_this_plan: Optional[Path] = None
     try:
         created_dir_this_plan, resolved_target_map, original_mtimes, prep_ok = _prepare_live_actions(
@@ -784,7 +790,8 @@ def perform_file_actions(
             _perform_backup_action(plan, backup_dir_path, action_messages)
             actions_performed_count, phase2_errors_rename = _perform_transactional_rename_move(
                 plan, run_batch_id, undo_manager, resolved_target_map, original_mtimes,
-                cfg_helper('preserve_mtime', False), cfg_helper('on_conflict', 'skip'), action_messages
+                cfg_helper('preserve_mtime', False), cfg_helper('on_conflict', 'skip'),
+                temp_suffix_prefix_val, action_messages
             )
             if phase2_errors_rename: results['success'] = False
         elif primary_action_type == 'trash':
@@ -798,7 +805,8 @@ def perform_file_actions(
         elif primary_action_type == 'rename':
             actions_performed_count, phase2_errors_std_rename = _perform_transactional_rename_move(
                 plan, run_batch_id, undo_manager, resolved_target_map, original_mtimes,
-                cfg_helper('preserve_mtime', False), cfg_helper('on_conflict', 'skip'), action_messages
+                cfg_helper('preserve_mtime', False), cfg_helper('on_conflict', 'skip'),
+                temp_suffix_prefix_val, action_messages
             )
             if phase2_errors_std_rename: results['success'] = False
         else:

@@ -23,7 +23,7 @@ from .exceptions import RenamerError, FileOperationError
 from .config_manager import ConfigHelper # For type hinting cfg_helper
 
 log = logging.getLogger(__name__)
-TEMP_SUFFIX_PREFIX = ".renametmp_" # Should be same as file_system_ops.py
+# TEMP_SUFFIX_PREFIX = ".renametmp_" # Removed hardcoded constant
 MTIME_TOLERANCE = 1.0
 HASH_CHUNK_SIZE = 65536
 
@@ -316,7 +316,9 @@ class UndoManager:
                 conn.close()
 
     def _find_temp_file(self, final_dest_path: Path) -> Optional[Path]:
-        temp_pattern = f"{final_dest_path.stem}{TEMP_SUFFIX_PREFIX}*{final_dest_path.suffix}"
+        # Fetch temp_suffix_prefix from config
+        temp_suffix_prefix_val = self.cfg('temp_file_suffix_prefix', ".renametmp_")
+        temp_pattern = f"{final_dest_path.stem}{temp_suffix_prefix_val}*{final_dest_path.suffix}"
         try:
             matches = list(final_dest_path.parent.glob(temp_pattern))
             if len(matches) == 1:
