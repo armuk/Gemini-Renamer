@@ -951,8 +951,8 @@ class MetadataFetcher:
         final_meta = MediaMetadata(is_movie=True)
         tmdb_movie_data: Optional[Any] = None
         tmdb_ids: Optional[Dict[str, Any]] = None
-        tmdb_score: Optional[float] = None
-        lang = str(self.cfg('tmdb_language', 'en')) 
+        tmdb_score: Optional[float] = None # This will store the -1.0 if confirmation is needed
+        lang = str(self.cfg('tmdb_language', 'en'))
         cache_key = f"movie::{movie_title_guess}_{year_guess}_{lang}"
         fetch_error_message: Optional[str] = None
         is_yearless_match_attempt = year_guess is None
@@ -969,21 +969,56 @@ class MetadataFetcher:
                 try:
                     await self.rate_limiter.wait()
                     tmdb_movie_data, tmdb_ids, tmdb_score = await self._do_fetch_tmdb_movie(movie_title_guess, year_guess, lang)
-                    if tmdb_movie_data is not None: 
+                    if tmdb_movie_data is not None:
                          await self._set_cache(cache_key, (tmdb_movie_data, tmdb_ids, tmdb_score))
                 except MetadataError as me:
                     log.error(f"TMDB movie fetch failed for '{movie_title_guess}': {me}")
                     fetch_error_message = str(me)
-                    tmdb_movie_data, tmdb_ids, tmdb_score = None, None, None 
-                except Exception as e: 
+                    tmdb_movie_data, tmdb_ids, tmdb_score = None, None, None
+                except Exception as e:
                      log.error(f"Unexpected error during TMDB movie fetch for '{movie_title_guess}': {type(e).__name__}: {e}", exc_info=True)
                      fetch_error_message = f"Unexpected error fetching TMDB movie: {type(e).__name__}"
                      tmdb_movie_data, tmdb_ids, tmdb_score = None, None, None
 
-            if tmdb_movie_data is None and not fetch_error_message: 
+            if tmdb_movie_data is None and not fetch_error_message:
                  log.debug(f"TMDB fetch for '{movie_title_guess}' returned no movie data object (e.g., not found, match criteria not met).")
                  fetch_error_message = f"No TMDB match for movie '{movie_title_guess}'."
 
+
+        if tmdb_movie_data:
+            # The score -1.0 from _sync_tmdb_movie_fetch indicates yearless_confirm_needed
+            # We will NOT prompt here. The caller (main_processor) will handle it.
+            # We simply pass the score (which might be -1.0) along.
+
+            try:
+                final_meta.source_api = "tmdb"
+                # Store the score as is; -1.0 will be a signal to the caller.
+                final_meta.match_confidence = tmdb_score
+                title_val = getattr(tmdb_movie_data, 'title', None) if isinstance(tmdb_movie_data, AsObj) else tmdb_movie_data.get('title')
+                release_date_val = getattr(tmdb_movie_data, 'release_date', None) if isinstance(tmdb_movie_data, AsObj) else tmdb_movie_data.get('release_date')
+                final_meta.movie_title = str(title_val) if title_val else None
+                final_meta.release_date = str(release_date_val) if release_date_val else None
+                final_meta.movie_year = self._get_year_from_date(final_meta.release_date)
+                if isinstance(tmdb_ids, dict):
+                     final_meta.ids = tmdb_ids
+                     final_meta.collection_name = str(tmdb_ids.get('collection_name')) if tmdb_ids.get('collection_name') else None
+                     final_meta.collection_id = int(tmdb_ids['collection_id']) if tmdb_ids.get('collection_id') is not None else None
+                else: final_meta.ids = {}
+                log.debug(f"Successfully populated final_meta from TMDB for '{movie_title_guess}'. Score: {final_meta.match_confidence}")
+            except Exception as e_populate:
+                log.error(f"Error populating final_meta for '{movie_title_guess}' from TMDB data: {e_populate}", exc_info=True);
+                final_meta.source_api = None
+                fetch_error_message = fetch_error_message or f"Error processing TMDB data: {type(e_populate).__name__}"
+
+        if not final_meta.source_api:
+             log.warning(f"Metadata fetch or population ultimately failed for movie: '{movie_title_guess}' (Year guess: {year_guess})")
+             if not final_meta.movie_title: final_meta.movie_title = movie_title_guess
+             if not final_meta.movie_year: final_meta.movie_year = year_guess
+             final_error = fetch_error_message or f"Failed to obtain valid metadata for movie '{movie_title_guess}'."
+             raise MetadataError(final_error)
+
+        log.debug(f"fetch_movie_metadata returning final result for '{movie_title_guess}': Source='{final_meta.source_api}', Title='{final_meta.movie_title}', Year={final_meta.movie_year}, IDs={final_meta.ids}, Collection={final_meta.collection_name}, Score={final_meta.match_confidence}")
+        return final_meta
 
         if tmdb_movie_data: 
             # Handle 'confirm' strategy for yearless matches

@@ -26,6 +26,8 @@ associated_extensions = [".srt", ".sub", ".ssa", ".ass", ".vtt", ".nfo", ".jpg",
 unknown_file_handling = "move_to_unknown"  # or "guessit_only" or "skip"
 unknown_files_dir = "_unknown_files_"
 
+movie_yearless_match_confidence = "confirm" # or "high", "medium", "low"
+
 series_metadata_preference = ["tmdb", "tvdb"]
 
 
