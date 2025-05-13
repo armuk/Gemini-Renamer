@@ -64,10 +64,6 @@ ignore_patterns = [".*", "*.partial", "Thumbs.db", "*[sS]ample*"]
 
 # ... other settings ...
 
-
-
-
-
 [profile.plex_optimized]
 # Example profile overriding some defaults
 series_format = "{show_title} - S{season:0>2}E{episode:0>2} - {episode_title} [{quality} {audio_codec}]{ext}" # Assuming guessit provides these
