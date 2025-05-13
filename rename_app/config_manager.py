@@ -82,6 +82,7 @@ class BaseProfileSettings(BaseModel):
     tmdb_match_strategy: Optional[str] = Field(default='first', description="TMDB matching strategy: 'first', 'fuzzy'.")
     tmdb_match_fuzzy_cutoff: Optional[int] = Field(default=70, ge=0, le=100, description="Minimum score for 'fuzzy' TMDB match.")
     tmdb_first_result_min_score: Optional[int] = Field(default=65, ge=0, le=100, description="Minimum fuzzy score for a 'first' strategy TMDB match to be considered valid (requires 'thefuzz').")
+    movie_yearless_match_confidence: Optional[str] = Field(default='medium', description="Confidence level for yearless movie matches: 'high' (>=90), 'medium' (>=80), 'low' (>=fuzzy_cutoff), 'confirm' (always confirm).")
     confirm_match_below: Optional[int] = Field(default=None, ge=0, le=100, description="Interactively confirm metadata match if score is below this value (0-100).")
     series_metadata_preference: Optional[List[str]] = Field(default=['tmdb', 'tvdb'], description="Preferred metadata source order for series.")
 
@@ -190,11 +191,16 @@ class BaseProfileSettings(BaseModel):
                 raise ValueError("temp_file_suffix_prefix must be a string.")
             if not v: # cannot be empty
                 raise ValueError("temp_file_suffix_prefix cannot be empty.")
-            # Basic check for problematic characters if you want, but usually not strictly needed for internal suffixes
-            # For example, ensure it doesn't contain characters that would break path construction.
-            # if any(char in v for char in ['/', '\\', ':', '*', '?', '"', '<', '>']):
-            #     raise ValueError("temp_file_suffix_prefix contains invalid path characters.")
         return v
+        
+    @field_validator('movie_yearless_match_confidence', mode='before')
+    @classmethod
+    def check_movie_yearless_match_confidence(cls, v: Any) -> Optional[str]:
+        if v is not None:
+            if not isinstance(v, str) or v.lower() not in ['high', 'medium', 'low', 'confirm']:
+                raise ValueError("movie_yearless_match_confidence must be one of 'high', 'medium', 'low', 'confirm'.")
+            return v.lower()
+        return 'medium' # Default if None
 
 
 class DefaultSettings(BaseProfileSettings):
@@ -216,7 +222,7 @@ def generate_default_toml_content() -> str:
         "File Handling & Extensions": ['video_extensions', 'associated_extensions', 'subtitle_extensions', 'on_conflict', 'create_folders', 'unknown_file_handling', 'unknown_files_dir', 'scan_strategy', 'temp_file_suffix_prefix'],
         "Scene Tags": ['scene_tags_in_filename', 'scene_tags_to_preserve'],
         "Subtitles": ['subtitle_encoding_detection'],
-        "API & Metadata Options": ['api_rate_limit_delay', 'api_retry_attempts', 'api_retry_wait_seconds', 'api_year_tolerance', 'tmdb_match_strategy', 'tmdb_match_fuzzy_cutoff', 'tmdb_first_result_min_score', 'confirm_match_below', 'series_metadata_preference'],
+        "API & Metadata Options": ['api_rate_limit_delay', 'api_retry_attempts', 'api_retry_wait_seconds', 'api_year_tolerance', 'tmdb_match_strategy', 'tmdb_match_fuzzy_cutoff', 'tmdb_first_result_min_score', 'movie_yearless_match_confidence', 'confirm_match_below', 'series_metadata_preference'],
         "Caching Options": ['cache_enabled', 'cache_directory', 'cache_expire_seconds'],
         "Undo Options": ['enable_undo', 'undo_db_path', 'undo_expire_days', 'undo_check_integrity', 'undo_integrity_hash_bytes', 'undo_integrity_hash_full'],
         "Logging Options": ['log_file', 'log_level'],
@@ -444,6 +450,13 @@ class ConfigManager:
                     return validated_list
                 except ValueError:
                     log.warning(f"Invalid command-line value for {key}: '{command_line_value}'. Ignoring.")
+            # Add similar validation for movie_yearless_match_confidence if needed from CLI
+            elif key == 'movie_yearless_match_confidence' and isinstance(command_line_value, str):
+                try:
+                    validated_value = BaseProfileSettings.model_fields['movie_yearless_match_confidence'].validate(command_line_value)
+                    return validated_value
+                except ValueError:
+                    log.warning(f"Invalid command-line value for {key}: '{command_line_value}'. Ignoring.")
             else:
                 return command_line_value
 
@@ -456,6 +469,9 @@ class ConfigManager:
             if val_from_profile is not None:
                 if key == 'series_metadata_preference' and not (isinstance(val_from_profile, list) and len(val_from_profile) == 2 and set(s.lower() for s in val_from_profile) == {'tmdb', 'tvdb'}):
                     log.warning(f"Invalid config value for '{key}' in profile '{profile}'. Using default from model.")
+                # Add similar check for movie_yearless_match_confidence
+                elif key == 'movie_yearless_match_confidence' and not (isinstance(val_from_profile, str) and val_from_profile.lower() in ['high', 'medium', 'low', 'confirm']):
+                    log.warning(f"Invalid config value for '{key}' ('{val_from_profile}') in profile '{profile}'. Using default from model.")
                 else:
                     return val_from_profile
 
@@ -465,6 +481,9 @@ class ConfigManager:
             if val_from_default_section is not None:
                 if key == 'series_metadata_preference' and not (isinstance(val_from_default_section, list) and len(val_from_default_section) == 2 and set(s.lower() for s in val_from_default_section) == {'tmdb', 'tvdb'}):
                     log.warning(f"Invalid config value for '{key}' in profile 'default'. Using default from model.")
+                # Add similar check for movie_yearless_match_confidence
+                elif key == 'movie_yearless_match_confidence' and not (isinstance(val_from_default_section, str) and val_from_default_section.lower() in ['high', 'medium', 'low', 'confirm']):
+                    log.warning(f"Invalid config value for '{key}' ('{val_from_default_section}') in profile 'default'. Using default from model.")
                 else:
                     return val_from_default_section
         

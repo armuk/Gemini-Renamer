@@ -45,6 +45,7 @@ def create_parser():
     parser_rename.add_argument("--subtitle-encoding-detection", action=argparse.BooleanOptionalAction, default=None, help="Detect subtitle encoding (overrides config).")
     parser_rename.add_argument("--confirm-match-below", type=int, metavar="SCORE", default=None, choices=range(0, 101), help="Interactively confirm metadata match if fuzzy score is below SCORE (0-100).")
     parser_rename.add_argument("--series-source-pref", type=str, default=None, help="Preferred metadata source order for series (comma-separated, e.g., tmdb,tvdb or tvdb,tmdb).")    
+    parser_rename.add_argument("--movie-yearless-match-confidence", choices=['high', 'medium', 'low', 'confirm'], default=None, help="Confidence requirement for yearless movie matches (overrides config).")
     parser_rename.add_argument("--unknown-file-handling", choices=['skip', 'guessit_only', 'move_to_unknown'], default=None, help="How to handle files where type cannot be determined (overrides config).")
     parser_rename.add_argument("--unknown-files-dir", type=str, default=None, help="Directory for 'move_to_unknown' handling (relative to target or absolute, overrides config).")
 

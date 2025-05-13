@@ -1,5 +1,3 @@
-# rename_app/metadata_fetcher.py
-
 import logging
 import time
 import asyncio
@@ -24,7 +22,7 @@ from .config_manager import ConfigHelper # For type hinting cfg_helper
 
 # --- UI Utils Import ---
 from rename_app.ui_utils import (
-    ConsoleClass,
+    ConsoleClass, ConfirmClass, # Added ConfirmClass for potential use in interactive confirm
     RichConsoleActual,
     RICH_AVAILABLE_UI as RICH_AVAILABLE
 )
@@ -47,11 +45,8 @@ if TYPE_CHECKING:
     except ImportError:
         DiskCacheType_Hint: TypeAlias = Any
 else:
-    # At runtime, this alias is primarily for completeness if directly inspected,
-    # but the type hint in the class will refer to the TYPE_CHECKING version.
     DiskCacheType_Hint: TypeAlias = Any
 
-# Define DiskCacheType for runtime use
 DiskCacheType = DiskCacheType_Hint
 
 try:
@@ -68,7 +63,7 @@ try:
 except ImportError:
     THEFUZZ_AVAILABLE = False
     fuzz = None
-    fuzz_process = None # Define fuzz_process as None if thefuzz is not available
+    fuzz_process = None 
 
 try:
     import dateutil.parser
@@ -326,16 +321,15 @@ class MetadataFetcher:
         self.tmdb_strategy = str(self.cfg('tmdb_match_strategy', 'first'))
         self.tmdb_fuzzy_cutoff = int(self.cfg('tmdb_match_fuzzy_cutoff', 70))
         self.tmdb_first_result_min_score = int(self.cfg('tmdb_first_result_min_score', 65))
-        log.debug(f"Fetcher Config: Year Tolerance={self.year_tolerance}, TMDB Strategy='{self.tmdb_strategy}', TMDB Fuzzy Cutoff={self.tmdb_fuzzy_cutoff}, TMDB First Result Min Score={self.tmdb_first_result_min_score}")
+        self.movie_yearless_match_confidence = str(self.cfg('movie_yearless_match_confidence', 'medium'))
+        log.debug(f"Fetcher Config: Year Tolerance={self.year_tolerance}, TMDB Strategy='{self.tmdb_strategy}', TMDB Fuzzy Cutoff={self.tmdb_fuzzy_cutoff}, TMDB First Result Min Score={self.tmdb_first_result_min_score}, Movie Yearless Confidence='{self.movie_yearless_match_confidence}'")
 
-        # Use the DiskCacheType defined at the module level (within TYPE_CHECKING guard)
-        self.cache: Optional[DiskCacheType] = None  # <--- USE THE ALIAS DEFINED AT MODULE LEVEL
+        self.cache: Optional[DiskCacheType] = None
         
-        self.cache_enabled = bool(self.cfg('cache_enabled', True)) # This is your line 328 (approx)
+        self.cache_enabled = bool(self.cfg('cache_enabled', True)) 
         self.cache_expire = int(self.cfg('cache_expire_seconds', 60 * 60 * 24 * 7))
         if self.cache_enabled:
-            if DISKCACHE_AVAILABLE and actual_diskcache_module is not None: # Use runtime imported module
-                # ... (cache_dir_path logic) ...
+            if DISKCACHE_AVAILABLE and actual_diskcache_module is not None: 
                 cache_dir_config = self.cfg('cache_directory', None)
                 cache_dir_path: Optional[Path] = None
                 if cache_dir_config: cache_dir_path = Path(str(cache_dir_config)).resolve()
@@ -348,7 +342,6 @@ class MetadataFetcher:
                 if cache_dir_path:
                     status_context: Any = None
                     try:
-                        # ... (status context logic) ...
                         if RICH_AVAILABLE and isinstance(self.console, RichConsoleActual) and hasattr(self.console, 'status'):
                             status_context = self.console.status("[bold green]Initializing metadata cache...[/]", spinner="dots") # type: ignore
                             if status_context: status_context.start() # type: ignore
@@ -356,17 +349,14 @@ class MetadataFetcher:
                             self.console.print("Initializing metadata cache...")
 
                         cache_dir_path.mkdir(parents=True, exist_ok=True)
-                        # Use the runtime imported module here
                         self.cache = actual_diskcache_module.Cache(str(cache_dir_path)) # type: ignore
                         log.info(f"Persistent cache initialized at: {cache_dir_path} (Expiration: {self.cache_expire}s)")
 
-                        # ... (status context stop logic) ...
                         if status_context and hasattr(status_context, 'stop'):
                             status_context.stop() # type: ignore
                         self.console.print("[green]✓ Metadata cache initialized.[/green]")
 
                     except Exception as e:
-                        # ... (error handling for cache init) ...
                         if status_context and hasattr(status_context, 'stop'):
                             status_context.stop() # type: ignore
                         builtins.print(f"Error initializing disk cache at '{cache_dir_path}': {e}. Disabling cache.", file=sys.stderr)
@@ -437,8 +427,7 @@ class MetadataFetcher:
         movie_match_obj: Optional[Any] = None
         match_score: Optional[float] = None
         try:
-            results_obj = search.search(sync_title) # type: ignore # tmdbv3api can be dynamic
-            # Consume results_obj to get a list for count and later iteration
+            results_obj = search.search(sync_title) # type: ignore 
             results_list = list(results_obj) if results_obj else []
             log.debug(f"TMDB raw movie search results [sync thread] for '{sync_title}': Count={len(results_list)}")
             if not results_list:
@@ -454,8 +443,9 @@ class MetadataFetcher:
             log.error(f"Unexpected error during TMDB movie search for '{sync_title}' [sync thread]: {e_search}", exc_info=True); raise
 
         processed_results_list = results_list
+        is_yearless_match_attempt = sync_year_guess is None # Flag for yearless specific logic
 
-        if sync_year_guess and processed_results_list:
+        if sync_year_guess and processed_results_list: # Apply year filter if year_guess is provided
             log.debug(f"Applying year filter ({sync_year_guess} +/- {self.year_tolerance}) to TMDB movie results.")
             filtered_list = []
             try:
@@ -477,38 +467,57 @@ class MetadataFetcher:
             if results_as_dicts_tuple:
                 best_match_from_fuzzy_dict: Optional[Dict] = None
                 temp_score: Optional[float] = None
+                
+                # Determine effective fuzzy cutoff based on yearless status
+                effective_fuzzy_cutoff = self.tmdb_fuzzy_cutoff
+                if is_yearless_match_attempt:
+                    if self.movie_yearless_match_confidence == 'high': effective_fuzzy_cutoff = 90
+                    elif self.movie_yearless_match_confidence == 'medium': effective_fuzzy_cutoff = 80
+                    elif self.movie_yearless_match_confidence == 'low': effective_fuzzy_cutoff = self.tmdb_fuzzy_cutoff # Use standard fuzzy
+                    # 'confirm' strategy doesn't change cutoff here, but is handled later
+                    log.debug(f"Yearless movie match: using effective fuzzy cutoff of {effective_fuzzy_cutoff} (strategy: {self.movie_yearless_match_confidence})")
+
 
                 if self.tmdb_strategy == 'fuzzy' and THEFUZZ_AVAILABLE and fuzz:
-                    log.debug(f"Attempting TMDB movie fuzzy match (cutoff: {self.tmdb_fuzzy_cutoff}).")
-                    match_tuple = find_best_match(sync_title, results_as_dicts_tuple, result_key='title', id_key='id', score_cutoff=self.tmdb_fuzzy_cutoff)
+                    log.debug(f"Attempting TMDB movie fuzzy match (cutoff: {effective_fuzzy_cutoff}).")
+                    match_tuple = find_best_match(sync_title, results_as_dicts_tuple, result_key='title', id_key='id', score_cutoff=effective_fuzzy_cutoff)
                     if match_tuple: best_match_from_fuzzy_dict, temp_score = match_tuple
 
-                if not best_match_from_fuzzy_dict:
-                    log.debug("Using 'first' result strategy for TMDB movie.")
+                if not best_match_from_fuzzy_dict: # Fallback to 'first' or if fuzzy failed
+                    log.debug("Using 'first' result strategy for TMDB movie (or fuzzy failed).")
                     first_raw_match_dict = next(iter(results_as_dicts_tuple), None)
                     if first_raw_match_dict:
                         if THEFUZZ_AVAILABLE and fuzz:
                             api_title_str = str(first_raw_match_dict.get('title', ''))
                             first_score_val = float(fuzz.ratio(str(sync_title).lower(), api_title_str.lower()))
-                            log.debug(f"  'first' strategy: Title='{api_title_str}', Score vs '{sync_title}' = {first_score_val:.1f} (Min required: {self.tmdb_first_result_min_score})")
-                            if first_score_val >= self.tmdb_first_result_min_score:
+                            
+                            # Use a potentially different minimum score for yearless 'first' strategy matches
+                            effective_first_min_score = self.tmdb_first_result_min_score
+                            if is_yearless_match_attempt:
+                                if self.movie_yearless_match_confidence == 'high': effective_first_min_score = 90
+                                elif self.movie_yearless_match_confidence == 'medium': effective_first_min_score = 80
+                                elif self.movie_yearless_match_confidence == 'low': effective_first_min_score = self.tmdb_first_result_min_score
+                                # 'confirm' doesn't change score here, handled later
+                            
+                            log.debug(f"  'first' strategy: Title='{api_title_str}', Score vs '{sync_title}' = {first_score_val:.1f} (Min required: {effective_first_min_score})")
+                            if first_score_val >= effective_first_min_score:
                                 best_match_from_fuzzy_dict = first_raw_match_dict
                                 temp_score = first_score_val
                             else:
-                                log.warning(f"  'first' strategy: Match '{api_title_str}' score {first_score_val:.1f} is below threshold {self.tmdb_first_result_min_score}. Discarding.")
+                                log.warning(f"  'first' strategy: Match '{api_title_str}' score {first_score_val:.1f} is below threshold {effective_first_min_score}. Discarding.")
                                 best_match_from_fuzzy_dict = None
-                        else:
+                        else: # No fuzzy available, accept first result
                             best_match_from_fuzzy_dict = first_raw_match_dict
-                            temp_score = None
+                            temp_score = None # Cannot score without thefuzz
 
                 if best_match_from_fuzzy_dict:
                     matched_id_val = best_match_from_fuzzy_dict.get('id')
                     if matched_id_val is not None:
                         movie_match_obj = next((r_obj for r_obj in processed_results_list if isinstance(r_obj, (dict, AsObj)) and (getattr(r_obj, 'id', None) if isinstance(r_obj, AsObj) else r_obj.get('id')) == matched_id_val), None)
-                        match_score = temp_score
+                        match_score = temp_score # Assign the determined score
                     if not movie_match_obj:
                         log.warning(f"Could not find original object for matched movie dict ID {matched_id_val}. Using dict as movie_match_obj.")
-                        movie_match_obj = best_match_from_fuzzy_dict
+                        movie_match_obj = best_match_from_fuzzy_dict # Fallback
 
         if not movie_match_obj:
             log.warning(f"No suitable TMDB movie match found for '{sync_title}' (after filtering/matching)."); return None, None, None
@@ -519,11 +528,25 @@ class MetadataFetcher:
         movie_id_val = getattr(movie_match_obj, 'id', None) if isinstance(movie_match_obj, AsObj) else movie_match_obj.get('id')
         if not movie_id_val:
             log.error(f"Final TMDB movie match lacks 'id' or ID is None: {movie_match_obj}"); return None, None, None
-        log.debug(f"TMDB matched movie '{getattr(movie_match_obj, 'title', movie_match_obj.get('title', 'N/A'))}' ID: {movie_id_val} (Score: {match_score if match_score is not None else 'N/A'})")
+        
+        # Yearless 'confirm' strategy check
+        if is_yearless_match_attempt and self.movie_yearless_match_confidence == 'confirm':
+            log.debug(f"Yearless movie match for '{sync_title}' (ID: {movie_id_val}) requires confirmation due to 'confirm' strategy.")
+            # We can't directly prompt here as this is a sync function.
+            # We'll set a special score or flag that the async wrapper can check.
+            # For now, we'll use a very specific score to indicate this.
+            # Let's use -1.0 to signal "yearless_confirm_needed".
+            # The actual confirmation will happen in fetch_movie_metadata.
+            match_score = -1.0 
+            log.debug(f"TMDB matched movie '{getattr(movie_match_obj, 'title', movie_match_obj.get('title', 'N/A'))}' ID: {movie_id_val} (Score: marked for yearless confirm)")
+
+        else:
+            log.debug(f"TMDB matched movie '{getattr(movie_match_obj, 'title', movie_match_obj.get('title', 'N/A'))}' ID: {movie_id_val} (Score: {match_score if match_score is not None else 'N/A'})")
+
 
         final_movie_data_obj_details: Any = movie_match_obj
         try:
-            movie_details_obj = search.details(movie_id_val, append_to_response="external_ids,belongs_to_collection") # Added belongs_to_collection
+            movie_details_obj = search.details(movie_id_val, append_to_response="external_ids,belongs_to_collection") 
             if movie_details_obj: final_movie_data_obj_details = movie_details_obj
         except TMDbException as e_details_tmdb:
              status_code_details = getattr(e_details_tmdb, 'status_code', 0)
@@ -712,7 +735,7 @@ class MetadataFetcher:
 
                 if search_results_list:
                     try:
-                         tvdb_fuzzy_cutoff_val = int(self.cfg('tmdb_match_fuzzy_cutoff', 70))
+                         tvdb_fuzzy_cutoff_val = int(self.cfg('tmdb_match_fuzzy_cutoff', 70)) # Using TMDB's fuzzy as a general purpose one
                          best_match_tuple = find_best_match(sync_title, tuple(search_results_list), result_key='name', id_key='tvdb_id', score_cutoff=tvdb_fuzzy_cutoff_val)
                          if best_match_tuple:
                              best_match_dict_tvdb, score_tvdb = best_match_tuple
@@ -932,6 +955,7 @@ class MetadataFetcher:
         lang = str(self.cfg('tmdb_language', 'en')) 
         cache_key = f"movie::{movie_title_guess}_{year_guess}_{lang}"
         fetch_error_message: Optional[str] = None
+        is_yearless_match_attempt = year_guess is None
 
         cached_data = await self._get_cache(cache_key)
         if cached_data:
@@ -962,24 +986,46 @@ class MetadataFetcher:
 
 
         if tmdb_movie_data: 
-            try:
-                final_meta.source_api = "tmdb"
-                final_meta.match_confidence = tmdb_score
-                title_val = getattr(tmdb_movie_data, 'title', None) if isinstance(tmdb_movie_data, AsObj) else tmdb_movie_data.get('title')
-                release_date_val = getattr(tmdb_movie_data, 'release_date', None) if isinstance(tmdb_movie_data, AsObj) else tmdb_movie_data.get('release_date')
-                final_meta.movie_title = str(title_val) if title_val else None
-                final_meta.release_date = str(release_date_val) if release_date_val else None
-                final_meta.movie_year = self._get_year_from_date(final_meta.release_date) 
-                if isinstance(tmdb_ids, dict):
-                     final_meta.ids = tmdb_ids
-                     final_meta.collection_name = str(tmdb_ids.get('collection_name')) if tmdb_ids.get('collection_name') else None
-                     final_meta.collection_id = int(tmdb_ids['collection_id']) if tmdb_ids.get('collection_id') is not None else None
-                else: final_meta.ids = {}
-                log.debug(f"Successfully populated final_meta from TMDB for '{movie_title_guess}'. Score: {tmdb_score}")
-            except Exception as e_populate:
-                log.error(f"Error populating final_meta for '{movie_title_guess}' from TMDB data: {e_populate}", exc_info=True);
-                final_meta.source_api = None 
-                fetch_error_message = fetch_error_message or f"Error processing TMDB data: {type(e_populate).__name__}"
+            # Handle 'confirm' strategy for yearless matches
+            if is_yearless_match_attempt and tmdb_score == -1.0 and self.movie_yearless_match_confidence == 'confirm':
+                if hasattr(self.cfg, 'args') and self.cfg.args and not getattr(self.cfg.args, 'quiet', False):
+                    title_val = getattr(tmdb_movie_data, 'title', None) if isinstance(tmdb_movie_data, AsObj) else tmdb_movie_data.get('title')
+                    release_date_val = getattr(tmdb_movie_data, 'release_date', None) if isinstance(tmdb_movie_data, AsObj) else tmdb_movie_data.get('release_date')
+                    api_year = self._get_year_from_date(str(release_date_val)) if release_date_val else "N/A"
+                    confirm_prompt = f"Yearless match for '{movie_title_guess}': Found '{title_val}' ({api_year}). Confirm?"
+                    if not ConfirmClass.ask(confirm_prompt, default=True):
+                        log.info(f"User rejected yearless match for '{movie_title_guess}'.")
+                        fetch_error_message = f"User rejected yearless match confirmation for '{movie_title_guess}'."
+                        tmdb_movie_data = None # Discard the match
+                        tmdb_score = None # Reset score
+                    else:
+                        log.info(f"User confirmed yearless match for '{movie_title_guess}'.")
+                        tmdb_score = None # Set score to None or a high value if desired, as it was manually confirmed
+                else: # Non-interactive or quiet mode with 'confirm' strategy implies rejection for safety
+                    log.warning(f"Yearless match for '{movie_title_guess}' requires confirmation but cannot prompt. Rejecting match.")
+                    fetch_error_message = f"Yearless match for '{movie_title_guess}' rejected (confirmation required, non-interactive)."
+                    tmdb_movie_data = None
+                    tmdb_score = None
+            
+            if tmdb_movie_data: # Re-check if it was nulled by confirmation logic
+                try:
+                    final_meta.source_api = "tmdb"
+                    final_meta.match_confidence = tmdb_score if tmdb_score != -1.0 else None # Don't store -1.0 as score
+                    title_val = getattr(tmdb_movie_data, 'title', None) if isinstance(tmdb_movie_data, AsObj) else tmdb_movie_data.get('title')
+                    release_date_val = getattr(tmdb_movie_data, 'release_date', None) if isinstance(tmdb_movie_data, AsObj) else tmdb_movie_data.get('release_date')
+                    final_meta.movie_title = str(title_val) if title_val else None
+                    final_meta.release_date = str(release_date_val) if release_date_val else None
+                    final_meta.movie_year = self._get_year_from_date(final_meta.release_date) 
+                    if isinstance(tmdb_ids, dict):
+                        final_meta.ids = tmdb_ids
+                        final_meta.collection_name = str(tmdb_ids.get('collection_name')) if tmdb_ids.get('collection_name') else None
+                        final_meta.collection_id = int(tmdb_ids['collection_id']) if tmdb_ids.get('collection_id') is not None else None
+                    else: final_meta.ids = {}
+                    log.debug(f"Successfully populated final_meta from TMDB for '{movie_title_guess}'. Score: {final_meta.match_confidence}")
+                except Exception as e_populate:
+                    log.error(f"Error populating final_meta for '{movie_title_guess}' from TMDB data: {e_populate}", exc_info=True);
+                    final_meta.source_api = None 
+                    fetch_error_message = fetch_error_message or f"Error processing TMDB data: {type(e_populate).__name__}"
 
         if not final_meta.source_api: 
              log.warning(f"Metadata fetch or population ultimately failed for movie: '{movie_title_guess}' (Year guess: {year_guess})")
@@ -1027,7 +1073,7 @@ class MetadataFetcher:
                     log.debug(f"Using cached {source.upper()} data for series: '{show_title_guess}' S{season_num} (Score: {source_score})")
                 except (TypeError, ValueError, IndexError) as e_cache_unpack:
                     log.warning(f"Error unpacking {source.upper()} cache data for {cache_key}, ignoring cache: {e_cache_unpack}")
-                    cached_data = None
+                    cached_data = None # Force re-fetch
 
             if not cached_data:
                 try:
@@ -1049,11 +1095,11 @@ class MetadataFetcher:
                     
                     if source_data is not None:
                         cacheable_ids_payload = source_ids or {}
-                        cacheable_ids_payload['_ep_map'] = source_ep_map or {}
+                        cacheable_ids_payload['_ep_map'] = source_ep_map or {} # Store ep_map within the ids payload for simpler caching
                         await self._set_cache(cache_key, (source_data, cacheable_ids_payload, source_score))
                         if '_ep_map' in cacheable_ids_payload: # Restore after caching
-                            source_ep_map = cacheable_ids_payload.pop('_ep_map')
-                            source_ids = cacheable_ids_payload
+                            source_ep_map = cacheable_ids_payload.pop('_ep_map') # Extract ep_map
+                            source_ids = cacheable_ids_payload # Remaining is pure IDs
                 except MetadataError as me_fetch:
                     log.error(f"{source.upper()} series fetch failed: {me_fetch}")
                     source_error = str(me_fetch)
