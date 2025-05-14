@@ -24,12 +24,12 @@ def create_parser():
     parser_rename.add_argument("-r", "--recursive", action=argparse.BooleanOptionalAction, default=None, help="Process recursively (overrides config).")
     parser_rename.add_argument("--processing-mode", choices=['auto', 'series', 'movie'], default=None, help="Force processing mode (overrides config).")
     parser_rename.add_argument("--use-metadata", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable metadata fetching (overrides config).")
-    parser_rename.add_argument("--use-stream-info", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable extracting technical stream info (overrides config).") # Renamed from extract_stream_info for CLI consistency
+    parser_rename.add_argument("--use-stream-info", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable extracting technical stream info (overrides config).")
     parser_rename.add_argument("--preserve-mtime", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable preserving original file modification time (overrides config).")
     parser_rename.add_argument("--series-format", type=str, default=None, help="Series filename format string (overrides config).")
     parser_rename.add_argument("--movie-format", type=str, default=None, help="Movie filename format string (overrides config).")
     parser_rename.add_argument("--subtitle-format", type=str, default=None, help="Subtitle filename format string (overrides config).")
-    parser_rename.add_argument("--extensions", type=str, default=None, help="Comma-separated video+associated extensions (overrides config).") # Consider splitting this for clarity if needed
+    parser_rename.add_argument("--extensions", type=str, default=None, help="Comma-separated video+associated extensions (overrides config).")
     parser_rename.add_argument("--on-conflict", choices=['skip', 'overwrite', 'suffix', 'fail'], default=None, help="Action on filename conflict (overrides config).")
     parser_rename.add_argument("--create-folders", action=argparse.BooleanOptionalAction, default=None, help="Enable/disable folder creation (overrides config).")
     parser_rename.add_argument("--folder-format-series", type=str, default=None, help="Folder format string for series (overrides config).")
@@ -49,6 +49,12 @@ def create_parser():
     parser_rename.add_argument("--unknown-file-handling", choices=['skip', 'guessit_only', 'move_to_unknown'], default=None, help="How to handle files where type cannot be determined (overrides config).")
     parser_rename.add_argument("--unknown-files-dir", type=str, default=None, help="Directory for 'move_to_unknown' handling (relative to target or absolute, overrides config).")
 
+    # --- Direct ID Matching Group ---
+    id_group = parser_rename.add_mutually_exclusive_group()
+    id_group.add_argument("--tmdb-id", type=int, default=None, help="Force using this TMDB ID for metadata (applies to all files in the run).")
+    id_group.add_argument("--tvdb-id", type=int, default=None, help="Force using this TVDB ID for series metadata (applies to all series in the run).")
+
+    # --- Safety Options Group ---
     safety_group = parser_rename.add_mutually_exclusive_group()
     safety_group.add_argument("--backup-dir", type=Path, default=None, help="Backup originals before action.")
     safety_group.add_argument("--stage-dir", type=Path, default=None, help="Move files to staging dir.")
@@ -59,7 +65,7 @@ def create_parser():
     parser_undo.add_argument("batch_id", type=str, nargs='?', default=None, help="Batch ID of the run to undo/preview (required unless --list is used).")
     parser_undo.add_argument("--list", action="store_true", help="List available batch IDs and their timestamps from the undo log.")
     parser_undo.add_argument("--dry-run", action="store_true", help="Show which files would be reverted for the given batch ID without taking action.")
-    parser_undo.add_argument("--enable-undo", action=argparse.BooleanOptionalAction, default=None, help="Enable undo log for revert actions (rarely needed).") # Should this be here or only main config?
+    parser_undo.add_argument("--enable-undo", action=argparse.BooleanOptionalAction, default=None, help="Enable undo log for revert actions (rarely needed).")
     parser_undo.add_argument("--check-integrity", action=argparse.BooleanOptionalAction, default=None, help="Verify size/mtime before reverting.")
     parser_undo.add_argument("--log-file", type=str, default=None, help="Log file path for undo operation.")
 
@@ -73,7 +79,6 @@ def create_parser():
     
     parser_config_validate = config_subparsers.add_parser('validate', help='Validate the configuration file against the schema.')
 
-    # --- Generate Config Subcommand ---
     parser_config_generate = config_subparsers.add_parser('generate', help='Generate a default config.toml file.')
     parser_config_generate.add_argument('--output', type=Path, default=None, help='Optional path to save the generated config.toml. Defaults to the standard location (user config or CWD).')
     parser_config_generate.add_argument('--force', '-f', action='store_true', help='Overwrite the config file if it already exists at the target location.')
@@ -89,20 +94,15 @@ def parse_arguments(argv=None):
     args = parser.parse_args(argv)
     if not hasattr(args, 'profile') or args.profile is None:
         args.profile = 'default'
-    # Map CLI --use-stream-info to config key extract_stream_info if it's not None
+    
     if hasattr(args, 'use_stream_info') and args.use_stream_info is not None:
         args.extract_stream_info = args.use_stream_info
-    # Map CLI --series-source-pref to config key series_metadata_preference
     if hasattr(args, 'series_source_pref') and args.series_source_pref is not None:
         args.series_metadata_preference = args.series_source_pref
-    # If quiet mode is enabled, interactive mode for rename should be effectively disabled
-    # to prevent prompts, unless it's a critical confirmation that quiet mode cannot bypass.
+    
     if hasattr(args, 'quiet') and args.quiet and hasattr(args, 'interactive'):
         if args.interactive:
-            # Log a warning if both are set, quiet takes precedence for non-critical prompts
-            # This logging happens after log setup, so it will be visible if log level is appropriate.
-            # For now, we'll just let main_processor handle the interactive logic based on quiet.
+            # This logging will happen after actual log setup in main
+            # logging.getLogger(__name__).warning("Both --quiet and --interactive are set. Quiet mode may suppress some interactive prompts.")
             pass
-        # args.interactive = False # One option, but better to handle in consuming code
-
     return args
