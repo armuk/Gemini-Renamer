@@ -14,9 +14,10 @@ _RICH_TEXT_OK = False
 _RICH_PANEL_OK = False
 _RICH_PROGRESS_OK = False
 _RICH_TASKID_OK = False # Though TaskID is often just an int or type alias
+_RICH_GROUP_OK=False
 
 # Initialize Rich component variables to None
-RichConsoleActual, RichConfirm, RichPrompt, RichInvalidResponse = None, None, None, None
+RichConsoleActual, RichGroupActual, RichConfirm, RichPrompt, RichInvalidResponse = None, None, None, None, None
 RichTable, RichText, RichPanel, RichProgress = None, None, None, None
 RichBarColumn, RichProgressTextColumn, RichTimeElapsedColumn, RichMofNCompleteColumn = None, None, None, None
 RichTaskID_actual = None # Use a different name to avoid conflict if RichTaskID is a simple type
@@ -39,6 +40,15 @@ try:
     print(f"DEBUG ui_utils: RichPrompt imported successfully: {RichPrompt}")
 except ImportError:
     print("DEBUG ui_utils: Failed to import from rich.prompt (Confirm, Prompt, InvalidResponse).")
+    pass
+
+try:
+    from rich.console import Group as RichGroupActual_ # Import from console
+    RichGroupActual = RichGroupActual_
+    _RICH_GROUP_OK = True
+    print("DEBUG ui_utils: RichGroupActual imported successfully.")
+except ImportError:
+    print("DEBUG ui_utils: Failed to import rich.console.Group.")
     pass
 
 try:
@@ -166,6 +176,15 @@ class FallbackPrompt:
                 builtins.print(f"Invalid choice. Please select from: {', '.join(choices)}")
                 continue
             return response
+        
+class FallbackGroup: # A very simple fallback
+    def __init__(self, *renderables: Any):
+        self.renderables = renderables
+    def __rich_console__(self, console: Any, options: Any) -> Any:
+        for r in self.renderables:
+            yield r
+    def __str__(self) -> str: # Basic string representation for fallback
+        return "\n".join(str(r) for r in self.renderables)
 
 class FallbackInvalidResponse(Exception): pass
 
@@ -196,6 +215,37 @@ class FallbackTable:
         if not console_instance.quiet_mode:
             for row_data in self.rows:
                 console_instance.print(" | ".join(row_data))
+
+    def __str__(self) -> str: # Or a method like _render_as_text()
+        lines = []
+        if self.title:
+            lines.append(f"--- {self.title} ---")
+        
+        # Basic column width estimation (very simple)
+        num_cols = len(self.columns)
+        if num_cols == 0 and self.rows:
+            num_cols = len(self.rows[0])
+        
+        col_widths = [0] * num_cols
+        if self.columns:
+            for i, header in enumerate(self.columns):
+                col_widths[i] = max(col_widths[i], len(header))
+        
+        for row_data in self.rows:
+            for i, cell in enumerate(row_data):
+                if i < num_cols:
+                    col_widths[i] = max(col_widths[i], len(str(cell)))
+
+        if self.columns:
+            header_line = " | ".join(str(self.columns[i]).ljust(col_widths[i]) for i in range(num_cols))
+            lines.append(header_line)
+            lines.append("-+-".join("-" * col_widths[i] for i in range(num_cols))) # Separator
+
+        for row_data in self.rows:
+            row_line = " | ".join(str(cell).ljust(col_widths[i] if i < len(col_widths) else 0) for i, cell in enumerate(row_data))
+            lines.append(row_line)
+        return "\n".join(lines)
+    
 # Note: The FallbackTable print needs to be called explicitly if not using Rich.
 # For example, after populating, you might call console.print(table_instance)
 # and the FallbackConsole would call table_instance.__str__ or similar.
@@ -332,6 +382,10 @@ if TYPE_CHECKING:
     _RichPanelType = RichPanel if RichPanel else Any
     _FallbackPanelType = FallbackPanel if FallbackPanel else Any
     PanelClass = Union[_RichPanelType, _FallbackPanelType]
+
+    _RichGroupType = RichGroupActual if RichGroupActual else Any
+    _FallbackGroupType = FallbackGroup
+    GroupClass = Union[_RichGroupType, _FallbackGroupType]
     
 else:
     # In non-type-checking mode, we can directly assign the classes
@@ -347,11 +401,12 @@ else:
     TextClass = RichText if _RICH_TEXT_OK and RichText else FallbackText
     PanelClass = RichPanel if _RICH_PANEL_OK and RichPanel else FallbackPanel
     ProgressClass = RichProgress if _RICH_PROGRESS_OK and RichProgress else FallbackProgress
-
+    GroupClass = RichGroupActual if _RICH_GROUP_OK and RichGroupActual else FallbackGroup
+    
     BarColumnClass = RichBarColumn if _RICH_PROGRESS_OK and RichBarColumn else FallbackBarColumn
     ProgressTextColumnClass = RichProgressTextColumn if _RICH_PROGRESS_OK and RichProgressTextColumn else FallbackProgressTextColumn
     TimeElapsedColumnClass = RichTimeElapsedColumn if _RICH_PROGRESS_OK and RichTimeElapsedColumn else FallbackTimeElapsedColumn
     MofNCompleteColumnClass = RichMofNCompleteColumn if _RICH_PROGRESS_OK and RichMofNCompleteColumn else FallbackMofNCompleteColumn
     TaskIDClass = RichTaskID_actual if _RICH_TASKID_OK and RichTaskID_actual else FallbackTaskID
-
+    
 # print(f"DEBUG ui_utils: Final PromptClass is: {PromptClass}")

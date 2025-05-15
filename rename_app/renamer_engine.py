@@ -284,6 +284,15 @@ class RenamerEngine:
             plan.message = f"[{ProcessingStatus.INTERNAL_ERROR}] Cannot resolve base directory: {e}"
             return plan
 
+        log.debug(f"PLAN_RENAME_ENTRY for '{video_path.name}':")
+        log.debug(f"  Original Video Path: {video_path}")
+        log.debug(f"  Original Video Path Resolved: {original_video_path_resolved}")
+        log.debug(f"  Base Target Dir: {base_target_dir}")
+        if media_info.metadata:
+            log.debug(f"  MediaInfo Metadata Source: {media_info.metadata.source_api}, Title: {media_info.metadata.movie_title or media_info.metadata.show_title}, Year: {media_info.metadata.movie_year or media_info.metadata.show_year}, Score: {media_info.metadata.match_confidence}")
+        else:
+            log.debug(f"  MediaInfo Metadata: None")
+        log.debug(f"  MediaInfo FileType: {media_info.file_type}")
         log.debug(f"--- Planning Start: {video_path.name} ---");
         log.debug(f"Original Video Path Resolved: {original_video_path_resolved}")
 
@@ -357,8 +366,17 @@ class RenamerEngine:
                 # even if its name doesn't change, which should have generated a 'move' action.
                 # This means if created_dir_path is set, planned_actions_dict should not be empty if a move is needed.
                 if not plan.created_dir_path or (plan.created_dir_path and original_video_path_resolved.parent == plan.created_dir_path.resolve()):
+                    log.debug(f"PATH_ALREADY_CORRECT_CHECK for '{video_path.name}':")
+                    log.debug(f"  Generated video_stem for new name: '{new_video_stem}' vs original stem: '{video_path.stem}'")
+                    log.debug(f"  Calculated relative_folder: {relative_folder}")
+                    log.debug(f"  Calculated target_dir: {target_dir}")
+                    log.debug(f"  Calculated final_video_path: {final_video_path}")
+                    log.debug(f"  Calculated final_video_path_resolved: {final_video_path_resolved}")
+                    log.debug(f"  Original video_path_resolved: {original_video_path_resolved}")
+                    log.debug(f"  Condition check: not plan.created_dir_path ({not plan.created_dir_path}) OR (plan.created_dir_path ({plan.created_dir_path is not None}) AND original_video_path_resolved.parent ({original_video_path_resolved.parent}) == plan.created_dir_path.resolve() ({plan.created_dir_path.resolve() if plan.created_dir_path else 'N/A'}))")
+                    # ++++++++++++++++++++++++++++++
                     log.info(f"No actions planned for '{video_path.name}', path likely already correct.")
-                    plan.status = 'skipped' # CHANGED
+                    plan.status = 'skipped' 
                     plan.message = f"[{ProcessingStatus.PATH_ALREADY_CORRECT.name}] Path already correct for '{video_path.name}'."
                     # action_result['success'] will be handled by the caller based on this message/status
                     return plan
